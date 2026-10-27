@@ -21,10 +21,11 @@ const members = data.members.map((member) => ({ ...member, email: member.role_id
 if (members.some((member) => !member.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(member.email))) throw new Error("Every member needs a bound email; pass --owner-email for the Owner.");
 if (new Set(members.map((member) => member.email)).size !== members.length) throw new Error("Member emails must be unique.");
 const now = new Date().toISOString();
-const collections = Object.fromEntries(required.filter((key) => key !== "members").map((key) => [key, data[key].map((item) => {
+const collections = Object.fromEntries(required.filter((key) => key !== "members").map((key) => [key, data[key].map((item, position) => {
   const id = String(item.id ?? (key === "holiday_messages" ? item.sequence : key === "osint_monitors" ? item.contact_id : ""));
   if (!id || id.includes("/") || id.length > 200) throw new Error(`Invalid ${key} record ID.`);
   const clean = JSON.parse(JSON.stringify({ ...item, id, revision: 1, updated_at: item.updated_at || now, updated_by: "migration" }));
+  if (key === "contacts") clean.sort_order = position;
   if (key === "followup_actions") {
     if (clean.status === "done") clean.completed_at = clean.completed_on || now;
     delete clean.completed_on;

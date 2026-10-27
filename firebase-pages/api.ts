@@ -41,7 +41,9 @@ const readAll = async (name: string): Promise<Item[]> => {
     }, (cause) => { live.delete(name); rejectReady(cause); });
   }
   await entry.ready;
-  return entry.rows.map((item) => ({ ...item }));
+  const rows = entry.rows.map((item) => ({ ...item }));
+  if (name === "contacts") rows.sort((a, b) => Number(a.sort_order ?? Number.MAX_SAFE_INTEGER) - Number(b.sort_order ?? Number.MAX_SAFE_INTEGER) || String(a.name).localeCompare(String(b.name)));
+  return rows;
 };
 const readOne = async (name: string, id: string): Promise<Item | null> => {
   const { db } = requireFirebase();
@@ -345,6 +347,7 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
     if (path === "/api/contacts" && method === "POST") {
       const item = parse(options) as Item;
       if (typeof item.name !== "string" || !item.name.trim() || item.name.length > 300) throw new Error("Enter a valid contact name.");
+      item.sort_order ??= Date.now();
       return response({ contact: await put("contacts", item, true) });
     }
     const contact = /^\/api\/contacts\/([^/]+)$/.exec(path);
