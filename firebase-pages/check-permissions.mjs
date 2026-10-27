@@ -1,0 +1,10 @@
+import fs from "node:fs";
+const modules = JSON.parse(fs.readFileSync(new URL("./permission-catalog.json", import.meta.url), "utf8"));
+const catalog = modules.flatMap((module) => module.permissions.map((permission) => permission.key));
+const rules = fs.readFileSync(new URL("./firestore.rules", import.meta.url), "utf8");
+const body = /function knownPermissions\(\)\s*\{\s*return\s*\[([^\]]+)\]/s.exec(rules)?.[1];
+if (!body) throw new Error("Firestore rules have no permission allowlist.");
+const allowed = [...body.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+if (JSON.stringify([...catalog].sort()) !== JSON.stringify([...allowed].sort())) throw new Error("Permission catalog and Firestore rules differ.");
+if (new Set(catalog).size !== catalog.length) throw new Error("Duplicate permission key in catalog.");
+console.log(`Permission catalog matches Firestore rules (${catalog.length} permissions).`);

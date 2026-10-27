@@ -1,0 +1,11 @@
+{
+  "name": "ContactGraph",
+  "short_name": "Contacts",
+  "description": "Private contact network",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f8fbfc",
+  "theme_color": "#172f3d",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

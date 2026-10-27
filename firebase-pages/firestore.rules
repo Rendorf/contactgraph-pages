@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function googleUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function memberPath() {
+      return /databases/$(database)/documents/members/$(request.auth.token.email);
+    }
+    function activeMember() {
+      return googleUser() && exists(memberPath()) && get(memberPath()).data.active == true;
+    }
+    function memberRole() { return get(memberPath()).data.role_id; }
+    function rolePath() { return /databases/$(database)/documents/roles/$(memberRole()); }
+    function allowed(permission) {
+      return activeMember() && (memberRole() == 'owner'
+        || (exists(rolePath()) && permission in get(rolePath()).data.permissions));
+    }
+    function validRecord(id) {
+      return request.resource.data.id == id
+        && !request.resource.data.keys().hasAny(['photo_url', 'pending_sync'])
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.updated_at is string
+        && request.resource.data.updated_by == request.auth.uid;
+    }
+    function validUpdate(id) {
+      return validRecord(id) && request.resource.data.revision == resource.data.revision + 1;
+    }
+    function validContact(id) {
+      return validRecord(id)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 300;
+    }
+    function knownPermissions() {
+      return ['contacts.view', 'contacts.create', 'contacts.edit', 'contacts.delete', 'contacts.merge',
+        'tags.edit', 'tags.merge', 'meetings.view', 'meetings.create', 'meetings.edit', 'meetings.delete',
+        'followups.view', 'followups.manage', 'holidays.view', 'holidays.manage', 'drafts.view',
+        'drafts.manage', 'duplicates.view', 'duplicates.manage', 'graph.view', 'canvases.view',
+        'canvases.manage', 'osint.view', 'osint.manage', 'settings.manage', 'sync.read', 'sync.write',
+        'users.manage'];
+    }
+
+    match /members/{email} {
+      allow get: if activeMember() && (email == request.auth.token.email || allowed('users.manage'));
+      allow list: if allowed('users.manage');
+      allow create: if allowed('users.manage') && request.resource.data.email == email
+        && request.resource.data.role_id != 'owner' && request.resource.data.active is bool;
+      allow update: if allowed('users.manage') && resource.data.role_id != 'owner'
+        && request.resource.data.email == email && request.resource.data.role_id != 'owner'
+        && request.resource.data.active is bool;
+      allow delete: if allowed('users.manage') && resource.data.role_id != 'owner';
+    }
+    match /roles/{id} {
+      allow get: if activeMember();
+      allow list: if allowed('users.manage');
+      allow create, update: if allowed('users.manage') && id != 'owner'
+        && request.resource.data.id == id && request.resource.data.permissions is list
+        && 'contacts.view' in request.resource.data.permissions
+        && request.resource.data.permissions.hasOnly(knownPermissions());
+      allow delete: if false;
+    }
+    match /contacts/{id} {
+      allow read: if allowed('contacts.view');
+      allow create: if allowed('contacts.create') && validContact(id) && request.resource.data.revision == 1;
+      allow update: if (allowed('contacts.edit') || allowed('contacts.merge') ||
+          (allowed('tags.edit') && request.resource.data.diff(resource.data).changedKeys().hasOnly(['labels', 'revision', 'updated_at', 'updated_by'])))
+        && validContact(id) && validUpdate(id);
+      allow delete: if allowed('contacts.delete') || allowed('contacts.merge');
+    }
+    match /meetings/{id} {
+      allow read: if allowed('meetings.view');
+      allow create: if allowed('meetings.create') && validRecord(id) && request.resource.data.revision == 1
+        && request.resource.data.contact_ids is list && request.resource.data.contact_ids.size() > 0
+        && request.resource.data.insights is string;
+      allow update: if allowed('meetings.edit') && validUpdate(id);
+      allow delete: if allowed('meetings.delete');
+    }
+    match /followup_actions/{id} {
+      allow read: if allowed('followups.view');
+      allow create: if allowed('followups.manage') && validRecord(id) && request.resource.data.revision == 1
+        && request.resource.data.contact_id is string && request.resource.data.title is string
+        && request.resource.data.due_date is string;
+      allow update: if allowed('followups.manage') && validUpdate(id);
+      allow delete: if allowed('followups.manage');
+    }
+    match /followup_settings/{id} {
+      allow read: if allowed('followups.view');
+      allow create: if allowed('followups.manage') && validRecord(id) && request.resource.data.revision == 1;
+      allow update: if allowed('followups.manage') && validUpdate(id);
+      allow delete: if allowed('followups.manage');
+    }
+    match /canvases/{id} {
+      allow read: if allowed('canvases.view');
+      allow create: if allowed('canvases.manage') && validRecord(id) && request.resource.data.revision == 1
+        && request.resource.data.title is string && request.resource.data.nodes is list;
+      allow update: if allowed('canvases.manage') && validUpdate(id);
+      allow delete: if allowed('canvases.manage');
+    }
+    match /holidays/{id} {
+      allow read: if allowed('holidays.view');
+      allow create: if allowed('holidays.manage') && validRecord(id) && request.resource.data.revision == 1;
+      allow update: if allowed('holidays.manage') && validUpdate(id);
+      allow delete: if allowed('holidays.manage');
+    }
+    match /holiday_messages/{id} {
+      allow read: if allowed('drafts.view');
+      allow create: if allowed('drafts.manage') && validRecord(id) && request.resource.data.revision == 1;
+      allow update: if allowed('drafts.manage') && validUpdate(id);
+      allow delete: if allowed('drafts.manage');
+    }
+    match /photo_chunks/{id} {
+      allow read: if allowed('contacts.view');
+      allow create, update: if allowed('contacts.edit')
+        && request.resource.data.id == id
+        && request.resource.data.contact_id is string
+        && request.resource.data.index is int
+        && request.resource.data.index >= 0
+        && request.resource.data.total is int
+        && request.resource.data.total > 0
+        && request.resource.data.total <= 20
+        && request.resource.data.index < request.resource.data.total
+        && request.resource.data.mime in ['image/jpeg', 'image/png', 'image/webp']
+        && request.resource.data.sha256 is string
+        && request.resource.data.sha256.size() == 64
+        && request.resource.data.data is string
+        && request.resource.data.data.size() <= 700000;
+      allow delete: if allowed('contacts.edit');
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

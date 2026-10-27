@@ -1,0 +1,186 @@
+[
+  {
+    "id": "contacts",
+    "label": "Contacts",
+    "permissions": [
+      {
+        "key": "contacts.view",
+        "label": "View contacts"
+      },
+      {
+        "key": "contacts.create",
+        "label": "Create contacts"
+      },
+      {
+        "key": "contacts.edit",
+        "label": "Edit contacts"
+      },
+      {
+        "key": "contacts.delete",
+        "label": "Delete any contact"
+      },
+      {
+        "key": "contacts.merge",
+        "label": "Merge any contacts"
+      }
+    ]
+  },
+  {
+    "id": "tags",
+    "label": "Tags",
+    "permissions": [
+      {
+        "key": "tags.edit",
+        "label": "Edit tags"
+      },
+      {
+        "key": "tags.merge",
+        "label": "Merge tags"
+      }
+    ]
+  },
+  {
+    "id": "meetings",
+    "label": "Meetings",
+    "permissions": [
+      {
+        "key": "meetings.view",
+        "label": "View meetings"
+      },
+      {
+        "key": "meetings.create",
+        "label": "Add meetings"
+      },
+      {
+        "key": "meetings.edit",
+        "label": "Edit meetings"
+      },
+      {
+        "key": "meetings.delete",
+        "label": "Delete meetings"
+      }
+    ]
+  },
+  {
+    "id": "followups",
+    "label": "Follow-ups",
+    "permissions": [
+      {
+        "key": "followups.view",
+        "label": "View follow-ups"
+      },
+      {
+        "key": "followups.manage",
+        "label": "Manage follow-ups"
+      }
+    ]
+  },
+  {
+    "id": "holidays",
+    "label": "Holidays",
+    "permissions": [
+      {
+        "key": "holidays.view",
+        "label": "View holidays"
+      },
+      {
+        "key": "holidays.manage",
+        "label": "Manage holidays"
+      }
+    ]
+  },
+  {
+    "id": "notifications",
+    "label": "Notifications and drafts",
+    "permissions": [
+      {
+        "key": "drafts.view",
+        "label": "View drafts"
+      },
+      {
+        "key": "drafts.manage",
+        "label": "Manage drafts"
+      }
+    ]
+  },
+  {
+    "id": "duplicates",
+    "label": "Duplication and sync errors",
+    "permissions": [
+      {
+        "key": "duplicates.view",
+        "label": "View duplicate pairs"
+      },
+      {
+        "key": "duplicates.manage",
+        "label": "Merge or delete duplicate pairs"
+      }
+    ]
+  },
+  {
+    "id": "graph",
+    "label": "Graph",
+    "permissions": [
+      {
+        "key": "graph.view",
+        "label": "View graph"
+      }
+    ]
+  },
+  {
+    "id": "canva",
+    "label": "Canvas",
+    "permissions": [
+      {
+        "key": "canvases.view",
+        "label": "View canvases"
+      },
+      {
+        "key": "canvases.manage",
+        "label": "Manage canvases"
+      }
+    ]
+  },
+  {
+    "id": "osint",
+    "label": "OSINT",
+    "permissions": [
+      {
+        "key": "osint.view",
+        "label": "View OSINT"
+      },
+      {
+        "key": "osint.manage",
+        "label": "Manage OSINT"
+      }
+    ]
+  },
+  {
+    "id": "settings",
+    "label": "Settings and sync",
+    "permissions": [
+      {
+        "key": "settings.manage",
+        "label": "Manage settings and manual sync"
+      },
+      {
+        "key": "sync.read",
+        "label": "Download encrypted offline workspace"
+      },
+      {
+        "key": "sync.write",
+        "label": "Upload encrypted offline edits"
+      }
+    ]
+  },
+  {
+    "id": "accounts",
+    "label": "Users and roles",
+    "permissions": [
+      {
+        "key": "users.manage",
+        "label": "Manage users and roles"
+      }
+    ]
+  }
+]
