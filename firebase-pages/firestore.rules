@@ -67,7 +67,7 @@ service cloud.firestore {
       allow read: if allowed('contacts.view');
       allow create: if allowed('contacts.create') && validContact(id) && request.resource.data.revision == 1;
       allow update: if (allowed('contacts.edit') || allowed('contacts.merge') ||
-          (allowed('tags.edit') && request.resource.data.diff(resource.data).changedKeys().hasOnly(['labels', 'revision', 'updated_at', 'updated_by'])))
+          (allowed('tags.edit') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['labels', 'revision', 'updated_at', 'updated_by'])))
         && validContact(id) && validUpdate(id);
       allow delete: if allowed('contacts.delete') || allowed('contacts.merge');
     }

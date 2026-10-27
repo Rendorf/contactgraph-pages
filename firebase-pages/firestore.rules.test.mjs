@@ -9,12 +9,16 @@ await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore();
   await db.doc("members/owner@example.com").set({ id: "owner@example.com", email: "owner@example.com", role_id: "owner", active: true });
   await db.doc("members/assistant@example.com").set({ id: "assistant@example.com", email: "assistant@example.com", role_id: "assistant", active: true });
+  await db.doc("members/tagger@example.com").set({ id: "tagger@example.com", email: "tagger@example.com", role_id: "tagger", active: true });
   await db.doc("roles/assistant").set({ id: "assistant", name: "Assistant", permissions: ["contacts.view", "contacts.edit", "meetings.view"] });
+  await db.doc("roles/tagger").set({ id: "tagger", name: "Tag editor", permissions: ["contacts.view", "tags.edit"] });
   await db.doc("contacts/person-1").set({ id: "person-1", name: "Person One", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [] });
+  await db.doc("contacts/person-2").set({ id: "person-2", name: "Person Two", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [], private_note: "Keep this" });
 });
 const google = (email, uid) => env.authenticatedContext(uid, { email, email_verified: true, firebase: { sign_in_provider: "google.com" } }).firestore();
 const owner = google("owner@example.com", "owner-uid");
 const assistant = google("assistant@example.com", "assistant-uid");
+const tagger = google("tagger@example.com", "tagger-uid");
 const contact = (id, revision, uid, name = "Person One") => ({ id, name, revision, updated_at: "2026-10-27T01:00:00Z", updated_by: uid, labels: [] });
 
 test("unregistered, anonymous, and password identities cannot read private contacts", async () => {
@@ -36,6 +40,13 @@ test("contact writes reject stale revisions, spoofed IDs, and local-only fields"
   await assertFails(assistant.doc("contacts/person-1").set(contact("person-1", 2, "assistant-uid", "Stale")));
   await assertFails(assistant.doc("contacts/person-1").set(contact("different-id", 3, "assistant-uid")));
   await assertFails(assistant.doc("contacts/person-1").set({ ...contact("person-1", 3, "assistant-uid"), photo_url: "data:image/png;base64,AA==" }));
+});
+
+test("tag editors can change labels but cannot add or remove unrelated fields", async () => {
+  const labelsOnly = { ...contact("person-2", 2, "tagger-uid", "Person Two"), labels: ["Network"], private_note: "Keep this" };
+  await assertSucceeds(tagger.doc("contacts/person-2").set(labelsOnly));
+  await assertFails(tagger.doc("contacts/person-2").set({ ...labelsOnly, revision: 3, private_note: "unauthorized" }));
+  await assertFails(tagger.doc("contacts/person-2").set({ id: "person-2", name: "Person Two", revision: 3, updated_at: labelsOnly.updated_at, updated_by: "tagger-uid" }));
 });
 
 test("owner may manage assistant access but cannot edit or remove owner account", async () => {
