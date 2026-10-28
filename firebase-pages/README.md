@@ -2,6 +2,16 @@
 
 The Pages build is a static Vite app. GitHub Actions publishes only HTML, CSS, JavaScript, the app shell, and icons. Private CRM records live in Cloud Firestore under Google sign-in and the rules in `firestore.rules`.
 
+## Live deployment
+
+- Site: https://rendorf.github.io/contactgraph-pages/
+- Public source: https://github.com/Rendorf/contactgraph-pages
+- Firebase project: `contactgraph-vusal-2026`; default Firestore database in `eur3` (Europe), Standard edition, free tier.
+- Google sign-in is enabled; `rendorf.github.io` is an authorized authentication domain. The Owner and Assistant email accounts are bound in private Firestore member records.
+- The 2026-10-27 closed-file snapshot was imported on 2026-10-28, and all collection counts were verified. The live DuckDB and OSINT files had matching SHA-256 hashes at import time. A GitHub Actions build and deployment completed successfully.
+
+The published site serves the core CRM modules. The local and Hermes DuckDB apps are still separate, writable legacy instances; edits there do not sync to Firestore. Use the Pages app for new shared edits after checking sign-in and core flows on your devices. Keep the closed-file backup and export until the old instances are reconciled.
+
 ## Current migration snapshot
 
 The private 2026-10-27 export was made from a closed copy of the **running local Docker volume**, not the older repository DuckDB. It contains 2,537 contacts, 63 holidays, 22 messages, 188 meetings, three canvases, six follow-up records, 19 photos split into 20 Firestore documents, and the separate OSINT database records. The original DuckDB, OSINT DuckDB, and JSON export remain in `../backups/` outside this public repository. Take a fresh closed-file backup before a real cutover if the local app receives further edits.
