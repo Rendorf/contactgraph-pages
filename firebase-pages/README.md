@@ -5,6 +5,7 @@ The Pages build is a static Vite app. GitHub Actions publishes only HTML, CSS, J
 ## Live deployment
 
 - Site: https://contacts.vusalkhalilov.com/
+- Independent HTTPS fallback: https://contactgraph-vusal-2026.web.app/ (the verified 2026-11-01 Pages artifact; redeploy this fallback after later code releases)
 - Public source: https://github.com/Rendorf/contactgraph-pages
 - Firebase project: `contactgraph-vusal-2026`; default Firestore database in `eur3` (Europe), Standard edition, free tier.
 - Google sign-in is enabled; `contacts.vusalkhalilov.com` and `rendorf.github.io` are authorized authentication domains. The Owner and Assistant email accounts are bound in private Firestore member records.
