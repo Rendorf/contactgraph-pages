@@ -4,13 +4,21 @@ The Pages build is a static Vite app. GitHub Actions publishes only HTML, CSS, J
 
 ## Live deployment
 
-- Site: https://rendorf.github.io/contactgraph-pages/
+- Site: https://contacts.vusalkhalilov.com/
 - Public source: https://github.com/Rendorf/contactgraph-pages
 - Firebase project: `contactgraph-vusal-2026`; default Firestore database in `eur3` (Europe), Standard edition, free tier.
-- Google sign-in is enabled; `rendorf.github.io` is an authorized authentication domain. The Owner and Assistant email accounts are bound in private Firestore member records.
+- Google sign-in is enabled; `contacts.vusalkhalilov.com` and `rendorf.github.io` are authorized authentication domains. The Owner and Assistant email accounts are bound in private Firestore member records.
 - The 2026-10-27 closed-file snapshot was imported on 2026-10-28, and all collection counts were verified. The live DuckDB and OSINT files had matching SHA-256 hashes at import time. A GitHub Actions build and deployment completed successfully.
 
-The published site serves the core CRM modules. The local and Hermes DuckDB apps are still separate, writable legacy instances; edits there do not sync to Firestore. Use the Pages app for new shared edits after checking sign-in and core flows on your devices. Keep the closed-file backup and export until the old instances are reconciled.
+On 2026-11-01 the custom domain was moved from the Hermes Cloudflare Tunnel to
+GitHub Pages. Cloudflare DNS has a DNS-only CNAME for `contacts` pointing to
+`rendorf.github.io`. GitHub Pages owns the custom-domain setting and HTTPS
+certificate. The GitHub Actions build uses `PAGES_BASE_PATH=/` so assets load
+at the domain root. Site delivery and normal Firestore-backed edits no longer
+depend on the Hermes VM. The old Tunnel configuration remains available for
+rollback but is not the public DNS target.
+
+The published site serves the core CRM modules. The local and Hermes DuckDB apps remain separate legacy instances; edits there do not automatically sync to Firestore. Use the Pages app for new shared edits. Keep the closed-file backups and reconciliation report until the old instances are retired.
 
 ## Current migration snapshot
 
