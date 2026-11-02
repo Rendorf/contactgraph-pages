@@ -138,6 +138,7 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
   const [newTag, setNewTag] = useState("");
   const [rawJson, setRawJson] = useState(() => contact ? contactJson(contact) : "");
   const [rawError, setRawError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -171,11 +172,14 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
   };
   const save = async () => {
     if (!draft) return;
-    if (!validBirthday(String(draft.birthday ?? ""))) return toast.error("Enter a valid birthday as YYYY-MM-DD or MM-DD without a year.");
+    setSaveError("");
+    if (!validBirthday(String(draft.birthday ?? ""))) { setSaveError("Enter a valid birthday as YYYY-MM-DD or MM-DD without a year."); return; }
     setSaving(true);
     try {
       await onSave(draft);
       onOpenChange(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save this contact.");
     } finally {
       setSaving(false);
     }
@@ -266,6 +270,7 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
             {showAdvanced && <div className="mt-4"><Textarea className="min-h-80 font-mono text-xs leading-relaxed" spellCheck={false} value={rawJson} onChange={(event) => setRawJson(event.target.value)} aria-label="Complete contact JSON" />{rawError && <p className="mt-2 text-sm text-red-600">{rawError}</p>}<Button className="mt-3" type="button" variant="outline" onClick={applyRawJson}>Apply JSON</Button></div>}
           </section>}
         </div>}
+        {saveError && <p role="alert" className="border-t border-[#f3c4c4] bg-[#fff7f7] px-5 py-3 text-sm text-red-700">{saveError}</p>}
         <div className="flex gap-3 border-t border-[#dce6ec] bg-white px-5 py-4 sm:px-7">
           {!isNew && can("contacts.delete") && <Button variant="outline" className="h-11 text-[#b52e3c] hover:bg-[#fff1f2] hover:text-[#a11e2c]" onClick={() => setDeleteOpen(true)} disabled={!draft || saving}><Trash2 /><span className="hidden sm:inline">Delete</span></Button>}
           {(can("contacts.edit") || can("tags.edit") || (isNew && can("contacts.create"))) && <Button className="h-11 flex-1 bg-[#172f3d] hover:bg-[#24495c]" onClick={save} disabled={!draft || !draft.name.trim() || saving}>{saving ? "Saving…" : isNew ? "Add contact" : "Save changes"}</Button>}
