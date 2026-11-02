@@ -10,7 +10,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   await db.doc("members/owner@example.com").set({ id: "owner@example.com", email: "owner@example.com", role_id: "owner", active: true });
   await db.doc("members/assistant@example.com").set({ id: "assistant@example.com", email: "assistant@example.com", role_id: "assistant", active: true });
   await db.doc("members/tagger@example.com").set({ id: "tagger@example.com", email: "tagger@example.com", role_id: "tagger", active: true });
-  await db.doc("roles/assistant").set({ id: "assistant", name: "Assistant", permissions: ["contacts.view", "contacts.edit", "meetings.view"] });
+  await db.doc("roles/assistant").set({ id: "assistant", name: "Assistant", permissions: ["contacts.view", "contacts.create", "contacts.edit", "meetings.view"] });
   await db.doc("roles/tagger").set({ id: "tagger", name: "Tag editor", permissions: ["contacts.view", "tags.edit"] });
   await db.doc("contacts/person-1").set({ id: "person-1", name: "Person One", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [] });
   await db.doc("contacts/person-2").set({ id: "person-2", name: "Person Two", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [], private_note: "Keep this" });
@@ -26,6 +26,14 @@ test("unregistered, anonymous, and password identities cannot read private conta
   await assertFails(google("stranger@example.com", "stranger-uid").doc("contacts/person-1").get());
   const password = env.authenticatedContext("password-uid", { email: "assistant@example.com", email_verified: true, firebase: { sign_in_provider: "password" } }).firestore();
   await assertFails(password.doc("contacts/person-1").get());
+});
+
+test("approved users can create a contact and unknown users cannot", async () => {
+  const fresh = { id: "new-person", name: "New Person", emails: [], phones: [], labels: [], notes: "", birthday: "", sort_order: Date.now(), revision: 1, updated_at: "2026-11-02T00:00:00Z", updated_by: "assistant-uid" };
+  await assertFails(env.unauthenticatedContext().firestore().doc("contacts/new-person").set(fresh));
+  await assertFails(google("stranger@example.com", "stranger-uid").doc("contacts/new-person").set({ ...fresh, updated_by: "stranger-uid" }));
+  await assertFails(assistant.doc("contacts/forged-id").set(fresh));
+  await assertSucceeds(assistant.doc("contacts/new-person").set(fresh));
 });
 
 test("assistant can read and edit contacts but cannot delete or grant access", async () => {
