@@ -274,6 +274,7 @@ async function deleteContact(id: string, expectedRevision?: number) {
     tx.delete(ref);
     return true;
   });
+  if (deleted) window.dispatchEvent(new CustomEvent("contactgraph:contact-deleted", { detail: { id } }));
   refreshContacts();
   return deleted;
 }

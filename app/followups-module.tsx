@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Check, ChevronDown, Clock3, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -35,40 +35,66 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
   const [newDate, setNewDate] = useState(bakuToday);
   const [editingCadence, setEditingCadence] = useState("");
   const [cadenceDays, setCadenceDays] = useState(30);
+  const [deletedContacts, setDeletedContacts] = useState<Set<string>>(() => new Set());
+  const hiddenEntries = useRef(new Set<string>());
+  const loadSequence = useRef(0);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/followups");
-    const body = await response.json().catch(() => ({})) as Followups & { error?: string };
-    if (!response.ok) throw new Error(body.error || "Follow-ups could not be loaded.");
-    setData(body);
+  const acceptData = useCallback((body: Followups) => {
+    const hidden = hiddenEntries.current;
+    const sourceIds = new Set([...body.actions.map((item) => item.id), ...body.suggestions.map((item) => `suggestion:${item.contact_id}`)]);
+    const filtered = { ...body,
+      actions: body.actions.filter((item) => !hidden.has(item.id)),
+      suggestions: body.suggestions.filter((item) => !hidden.has(`suggestion:${item.contact_id}`)),
+    };
+    for (const id of hidden) if (!sourceIds.has(id)) hidden.delete(id);
+    setData(filtered);
     setLoadError("");
   }, []);
+
+  const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    const response = await fetch("/api/followups", { cache: "no-store" });
+    const body = await response.json().catch(() => ({})) as Followups & { error?: string };
+    if (!response.ok) throw new Error(body.error || "Follow-ups could not be loaded.");
+    if (sequence === loadSequence.current) acceptData(body);
+  }, [acceptData]);
   useEffect(() => {
     let active = true;
-    fetch("/api/followups").then(async (response) => {
-      const body = await response.json().catch(() => ({})) as Followups & { error?: string };
-      if (!response.ok) throw new Error(body.error || "Follow-ups could not be loaded.");
-      if (active) setData(body);
-    }).catch((error) => { if (active) { setLoadError("Follow-ups could not be loaded."); toast.error(error instanceof Error ? error.message : "Follow-ups could not be loaded."); } });
-    return () => { active = false; };
-  }, []);
+    void load().catch((error) => { if (active) { setLoadError("Follow-ups could not be loaded."); toast.error(error instanceof Error ? error.message : "Follow-ups could not be loaded."); } });
+    return () => { active = false; loadSequence.current += 1; };
+  }, [load]);
   useEffect(() => {
     const refresh = () => { void load().catch(() => toast.error("Follow-ups could not refresh.")); };
     for (const name of ["followup_actions", "followup_settings", "meetings", "contacts"]) window.addEventListener(`contactgraph:collection:${name}`, refresh);
     window.addEventListener("contactgraph:sync", refresh);
     return () => { for (const name of ["followup_actions", "followup_settings", "meetings", "contacts"]) window.removeEventListener(`contactgraph:collection:${name}`, refresh); window.removeEventListener("contactgraph:sync", refresh); };
   }, [load]);
+  useEffect(() => {
+    const deleted = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: unknown }>).detail?.id;
+      if (typeof id === "string") setDeletedContacts((current) => new Set(current).add(id));
+    };
+    window.addEventListener("contactgraph:contact-deleted", deleted);
+    return () => window.removeEventListener("contactgraph:contact-deleted", deleted);
+  }, []);
 
-  const mutate = async (payload: Record<string, unknown>, success: string) => {
+  const mutate = async (payload: Record<string, unknown>, success: string, removeId?: string) => {
     setBusy(true);
     try {
       const response = await fetch("/api/followups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Follow-up could not be saved.");
-      await load();
+      if (removeId) {
+        hiddenEntries.current.add(removeId);
+        setData((current) => current ? { ...current,
+          actions: current.actions.filter((item) => item.id !== removeId),
+          suggestions: current.suggestions.filter((item) => `suggestion:${item.contact_id}` !== removeId),
+        } : current);
+      }
       setEditingDate("");
       setEditingCadence("");
       toast.success(success);
+      try { await load(); } catch { toast.warning("Saved, but the follow-up list could not refresh yet."); }
       return true;
     } catch (error) { toast.error(error instanceof Error ? error.message : "Follow-up could not be saved."); return false; }
     finally { setBusy(false); }
@@ -78,11 +104,12 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
     : [], [contacts, contactQuery]);
   const entries = useMemo(() => {
     if (!data) return [];
+    const contactIds = new Set(contacts.map((contact) => contact.id));
     return [
       ...data.actions.map((item) => ({ kind: "action" as const, id: item.id, contact_id: item.contact_id, contact: item.contact, due_date: item.due_date, title: item.title, last_meeting: item.last_meeting, reason: `You set this next step for ${readableDate(item.due_date)}.` })),
       ...data.suggestions.map((item) => ({ kind: "suggestion" as const, id: `suggestion:${item.contact_id}`, contact_id: item.contact_id, contact: item.contact, due_date: item.due_date, title: "Reconnect", last_meeting: item.last_meeting, reason: `${item.cadence_days} days since the last recorded meeting or completed follow-up (${readableDate(item.last_activity)}).` })),
-    ].sort((a, b) => a.due_date.localeCompare(b.due_date) || (a.kind === "action" ? -1 : 1));
-  }, [data]);
+    ].filter((item) => contactIds.has(item.contact_id) && !deletedContacts.has(item.contact_id)).sort((a, b) => a.due_date.localeCompare(b.due_date) || (a.kind === "action" ? -1 : 1));
+  }, [contacts, data, deletedContacts]);
   const due = entries.filter((entry) => data && entry.due_date <= data.week_end);
   const upcoming = entries.filter((entry) => data && entry.due_date > data.week_end);
   const overdue = due.filter((entry) => data && entry.due_date < data.today).length;
@@ -93,8 +120,8 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
     <strong className="followup-next">{entry.title}</strong><p className="followup-reason">{entry.reason}</p>
     {entry.last_meeting && <div className="followup-meeting"><span>Last meeting · {readableDate(entry.last_meeting.date)}</span><p>{entry.last_meeting.insights}</p></div>}
     <div className="followup-actions"><Button size="sm" variant="outline" onClick={() => onOpenContact(entry.contact_id)}>Contact details</Button>
-      {can("followups.manage") && <><Button size="sm" onClick={() => void mutate(entry.kind === "action" ? { type: "complete", id: entry.id } : { type: "complete-suggestion", contact_id: entry.contact_id }, "Follow-up completed")} disabled={busy}><Check />Done</Button><Button size="sm" variant="outline" onClick={() => { setEditingDate(editingDate === entry.id ? "" : entry.id); setNewDate(entry.kind === "suggestion" ? tomorrow(data?.today || bakuToday()) : data?.today || bakuToday()); }} disabled={busy}><Clock3 />{entry.kind === "action" ? "Set date" : "Snooze"}</Button>
-        <Button size="sm" variant="ghost" onClick={() => void mutate(entry.kind === "action" ? { type: "delete", id: entry.id } : { type: "dismiss-suggestion", contact_id: entry.contact_id }, "Reminder dismissed")} disabled={busy}><X />Discard</Button>
+      {can("followups.manage") && <><Button size="sm" onClick={() => void mutate(entry.kind === "action" ? { type: "complete", id: entry.id } : { type: "complete-suggestion", contact_id: entry.contact_id }, "Follow-up completed", entry.id)} disabled={busy}><Check />Done</Button><Button size="sm" variant="outline" onClick={() => { setEditingDate(editingDate === entry.id ? "" : entry.id); setNewDate(entry.kind === "suggestion" ? tomorrow(data?.today || bakuToday()) : data?.today || bakuToday()); }} disabled={busy}><Clock3 />{entry.kind === "action" ? "Set date" : "Snooze"}</Button>
+        <Button size="sm" variant="ghost" onClick={() => void mutate(entry.kind === "action" ? { type: "delete", id: entry.id } : { type: "dismiss-suggestion", contact_id: entry.contact_id }, "Reminder dismissed", entry.id)} disabled={busy}><X />Discard</Button>
         {entry.kind === "suggestion" && <Button size="sm" variant="ghost" onClick={() => { setEditingCadence(editingCadence === entry.id ? "" : entry.id); setCadenceDays(data?.settings[entry.contact_id]?.cadence_days || 30); }} disabled={busy}>Cadence</Button>}</>}
     </div>
     {editingDate === entry.id && <div className="followup-inline"><Input type="date" min={entry.kind === "suggestion" ? tomorrow(data?.today || bakuToday()) : undefined} aria-label="New follow-up date" value={newDate} onChange={(event) => setNewDate(event.target.value)} /><Button size="sm" disabled={busy || !newDate} onClick={() => void mutate(entry.kind === "action" ? { type: "reschedule", id: entry.id, due_date: newDate } : { type: "snooze-suggestion", contact_id: entry.contact_id, due_date: newDate }, "Date saved")}>Save date</Button></div>}
@@ -103,7 +130,7 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
 
   return <main className="followups-module">
     <div className="module-heading"><div><p className="eyebrow">Relationship rhythm</p><h1 className="module-title">Who should I contact this week?</h1><p className="module-subtitle">A shared view of planned next steps and timely reconnections.</p></div><div className="meeting-count"><CalendarClock />Week ending {readableDate(data?.week_end || bakuToday())}</div></div>
-    <div className="followup-stats"><div><strong>{due.length}</strong><span>Due this week</span></div><div><strong>{overdue}</strong><span>Overdue</span></div><div><strong>{data?.suggestions.length || 0}</strong><span>Net suggestions</span></div></div>
+    <div className="followup-stats"><div><strong>{due.length}</strong><span>Due this week</span></div><div><strong>{overdue}</strong><span>Overdue</span></div><div><strong>{entries.filter((entry) => entry.kind === "suggestion").length}</strong><span>Net suggestions</span></div></div>
     {can("followups.manage") && <section className="followup-create"><div><h2>Set a next step</h2><p>Choose a person and a date. Your assistant will see the same queue.</p></div><div className="followup-form"><div className="followup-contact-picker"><Input value={contactQuery} onChange={(event) => { setContactQuery(event.target.value); setContactId(""); }} placeholder="Find a contact…" aria-label="Find a contact" />{matches.length > 0 && !selected && <div className="followup-matches">{matches.map((contact) => <button key={contact.id} onClick={() => { setContactId(contact.id); setContactQuery(contact.name); }}>{contact.name}{contact.organization ? ` · ${contact.organization}` : ""}</button>)}</div>}</div><Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder="Next step, e.g. ask about the proposal" aria-label="Next step" /><Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} aria-label="Due date" /><Button disabled={busy || !selected || !title.trim() || !dueDate} onClick={() => { void mutate({ type: "create", contact_id: contactId, title: title.trim(), due_date: dueDate }, "Follow-up added").then((saved) => { if (saved) { setTitle(""); setContactId(""); setContactQuery(""); } }); }}><Plus />Add follow-up</Button></div></section>}
     <section className="followup-list"><div className="followup-section-head"><div><h2>This week</h2><p>Overdue items stay here until completed or rescheduled.</p></div>{due.length > 10 && <Button size="sm" variant="ghost" onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${due.length}`}<ChevronDown /></Button>}</div>{!data ? <div className="followup-empty">{loadError ? <>{loadError} <Button size="sm" variant="outline" onClick={() => void load().catch(() => setLoadError("Follow-ups could not be loaded."))}>Retry</Button></> : "Loading follow-ups…"}</div> : due.length ? <div className="followup-grid">{(showAll ? due : due.slice(0, 10)).map(renderEntry)}</div> : <p className="followup-empty">Nothing due this week. Set a next step above or log a meeting with a Net contact.</p>}</section>
     {upcoming.length > 0 && <section className="followup-list"><div className="followup-section-head"><div><h2>Coming up</h2><p>Scheduled beyond this week.</p></div></div><div className="followup-grid">{upcoming.slice(0, showAll ? undefined : 10).map(renderEntry)}</div>{upcoming.length > 10 && <Button size="sm" variant="ghost" onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${upcoming.length}`}</Button>}</section>}
