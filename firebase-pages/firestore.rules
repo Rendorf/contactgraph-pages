@@ -40,8 +40,29 @@ service cloud.firestore {
         'tags.edit', 'tags.merge', 'meetings.view', 'meetings.create', 'meetings.edit', 'meetings.delete',
         'followups.view', 'followups.manage', 'holidays.view', 'holidays.manage', 'drafts.view',
         'drafts.manage', 'duplicates.view', 'duplicates.manage', 'graph.view', 'canvases.view',
-        'canvases.manage', 'osint.view', 'osint.manage', 'settings.manage', 'sync.read', 'sync.write',
+        'canvases.manage', 'osint.view', 'osint.manage', 'settings.manage', 'sync.read', 'sync.write', 'sync.run',
         'users.manage'];
+    }
+    function validSyncRequest(id) {
+      return id == 'threeway'
+        && request.resource.data.id == id
+        && request.resource.data.status == 'queued'
+        && request.resource.data.request_id is string
+        && request.resource.data.request_id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+        && request.resource.data.requested_at is string
+        && request.resource.data.requested_at.size() <= 35
+        && request.resource.data.requested_by == request.auth.uid;
+    }
+
+    match /sync_control/{id} {
+      allow get: if allowed('sync.run') && id == 'threeway';
+      allow list, delete: if false;
+      allow create: if allowed('sync.run') && validSyncRequest(id)
+        && request.resource.data.keys().hasOnly(['id', 'status', 'request_id', 'requested_at', 'requested_by']);
+      allow update: if allowed('sync.run') && validSyncRequest(id)
+        && resource.data.status in ['idle', 'succeeded', 'failed', 'conflicts']
+        && request.resource.data.request_id != resource.data.get('request_id', '')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'request_id', 'requested_at', 'requested_by']);
     }
 
     match /members/{email} {

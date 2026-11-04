@@ -71,3 +71,20 @@ test("private photos and unknown collections stay closed", async () => {
   await assertSucceeds(assistant.doc("photo_chunks/person-1_0").set({ id: "person-1_0", contact_id: "person-1", index: 0, total: 1, mime: "image/jpeg", sha256: "0".repeat(64), data: "AA==" }));
   await assertFails(owner.doc("unexpected/private").get());
 });
+
+test("three-way sync requests are authorized, single-flight, and cannot forge results", async () => {
+  const path = "sync_control/threeway";
+  const request = { id: "threeway", status: "queued", request_id: "11111111-1111-4111-8111-111111111111", requested_at: "2026-11-04T10:00:00.000Z", requested_by: "owner-uid" };
+  await assertFails(env.unauthenticatedContext().firestore().doc(path).get());
+  await assertFails(assistant.doc(path).get());
+  await assertFails(assistant.doc(path).set({ ...request, requested_by: "assistant-uid" }));
+  await assertFails(owner.doc(path).set({ ...request, requested_by: "assistant-uid" }));
+  await assertFails(owner.doc(path).set({ ...request, result: { contacts: 999 } }));
+  await assertSucceeds(owner.doc(path).set(request));
+  await assertFails(owner.doc(path).update({ request_id: "22222222-2222-4222-8222-222222222222" }));
+  await assertFails(owner.doc(path).update({ status: "succeeded", result: { contacts: 1 } }));
+  await env.withSecurityRulesDisabled(async (context) => context.firestore().doc(path).update({ status: "succeeded" }));
+  await assertSucceeds(owner.doc(path).update({ status: "queued", request_id: "22222222-2222-4222-8222-222222222222", requested_at: "2026-11-04T11:00:00.000Z", requested_by: "owner-uid" }));
+  await env.withSecurityRulesDisabled(async (context) => context.firestore().doc(path).set({ id: "threeway", status: "idle", worker_seen_at: "2026-11-04T11:00:00.000Z" }));
+  await assertSucceeds(owner.doc(path).update({ status: "queued", request_id: "33333333-3333-4333-8333-333333333333", requested_at: "2026-11-04T12:00:00.000Z", requested_by: "owner-uid" }));
+});

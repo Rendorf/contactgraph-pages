@@ -170,6 +170,10 @@
       {
         "key": "sync.write",
         "label": "Upload encrypted offline edits"
+      },
+      {
+        "key": "sync.run",
+        "label": "Run three-way data synchronization"
       }
     ]
   },
