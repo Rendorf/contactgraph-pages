@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Maximize2, Minus, Network, Plus, RotateCcw, Search, Tag, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 type GraphContact = {
   id: string;
@@ -34,9 +35,9 @@ const hash = (value: string) => {
   }
   return result >>> 0;
 };
-const groupsForContact = (contact: GraphContact, mode: GraphMode) => mode === "labels"
+const groupsForContact = (contact: GraphContact, mode: GraphMode, showUnassigned = false) => mode === "labels"
   ? (contact.labels ?? [])
-  : contact.organization?.trim() ? [contact.organization.trim()] : [];
+  : contact.organization?.trim() ? [contact.organization.trim()] : showUnassigned ? ["No organization"] : [];
 
 export function ContactGraph({ contacts, onSelectContact }: {
   contacts: GraphContact[];
@@ -44,6 +45,7 @@ export function ContactGraph({ contacts, onSelectContact }: {
 }) {
   const [graphMode, setGraphMode] = useState<GraphMode>("labels");
   const [focusTag, setFocusTag] = useState<string | null>(null);
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
   const [hoveredContact, setHoveredContact] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -79,10 +81,30 @@ export function ContactGraph({ contacts, onSelectContact }: {
   const zoomOut = () => setZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))));
   const zoomIn = () => setZoom((value) => Math.min(2, Number((value + 0.25).toFixed(2))));
 
+  const labelOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    contacts.forEach((contact) => new Set(contact.labels ?? []).forEach((label) => {
+      if (label.trim()) counts.set(label, (counts.get(label) ?? 0) + 1);
+    }));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [contacts]);
+  const selectedLabelCount = selectedLabel ? labelOptions.find(([label]) => label === selectedLabel)?.[1] ?? 0 : 0;
+  useEffect(() => {
+    if (selectedLabel && !labelOptions.some(([label]) => label === selectedLabel)) {
+      setSelectedLabel(null);
+      setFocusTag(null);
+    }
+  }, [labelOptions, selectedLabel]);
+  const showUnassigned = graphMode === "organizations" && Boolean(selectedLabel);
+  const groupNames = (contact: GraphContact) => groupsForContact(contact, graphMode, showUnassigned);
+
   const graph = useMemo(() => {
+    const sourceContacts = graphMode === "organizations" && selectedLabel
+      ? contacts.filter((contact) => (contact.labels ?? []).includes(selectedLabel))
+      : contacts;
     const tagContacts = new Map<string, Set<string>>();
-    contacts.forEach((contact) => {
-      groupsForContact(contact, graphMode).forEach((tag) => {
+    sourceContacts.forEach((contact) => {
+      groupsForContact(contact, graphMode, showUnassigned).forEach((tag) => {
         if (!tagContacts.has(tag)) tagContacts.set(tag, new Set());
         tagContacts.get(tag)?.add(contact.id);
       });
@@ -111,16 +133,16 @@ export function ContactGraph({ contacts, onSelectContact }: {
     }
 
     const visibleTagNames = new Set(tags.map(({ tag }) => tag));
-    const visibleContacts = contacts
+    const matchingContacts = sourceContacts
       .filter((contact) => focusTag
-        ? groupsForContact(contact, graphMode).includes(focusTag)
-        : groupsForContact(contact, graphMode).some((tag) => visibleTagNames.has(tag)))
+        ? groupsForContact(contact, graphMode, showUnassigned).includes(focusTag)
+        : groupsForContact(contact, graphMode, showUnassigned).some((tag) => visibleTagNames.has(tag)))
       .sort((a, b) => {
-        const aFocus = focusTag && groupsForContact(a, graphMode).includes(focusTag) ? 1 : 0;
-        const bFocus = focusTag && groupsForContact(b, graphMode).includes(focusTag) ? 1 : 0;
+        const aFocus = focusTag && groupsForContact(a, graphMode, showUnassigned).includes(focusTag) ? 1 : 0;
+        const bFocus = focusTag && groupsForContact(b, graphMode, showUnassigned).includes(focusTag) ? 1 : 0;
         return bFocus - aFocus || a.name.localeCompare(b.name);
-      })
-      .slice(0, focusTag ? FOCUSED_CONTACT_LIMIT : CONTACT_LIMIT);
+      });
+    const visibleContacts = matchingContacts.slice(0, focusTag ? FOCUSED_CONTACT_LIMIT : CONTACT_LIMIT);
 
     const tagPositions = new Map<string, Point>();
     tags.forEach(({ tag }, index) => {
@@ -140,7 +162,7 @@ export function ContactGraph({ contacts, onSelectContact }: {
 
     const contactPositions = new Map<string, Point>();
     visibleContacts.forEach((contact, index) => {
-      const linkedTags = groupsForContact(contact, graphMode).filter((tag) => visibleTagNames.has(tag));
+      const linkedTags = groupsForContact(contact, graphMode, showUnassigned).filter((tag) => visibleTagNames.has(tag));
       const random = hash(contact.id);
       if (focusTag && linkedTags.includes(focusTag)) {
         const angle = -Math.PI / 2 + (index / Math.max(1, visibleContacts.length)) * Math.PI * 2;
@@ -175,8 +197,8 @@ export function ContactGraph({ contacts, onSelectContact }: {
     tagEdges.sort((a, b) => b.shared - a.shared);
 
     const focusCount = focusTag ? tagContacts.get(focusTag)?.size ?? 0 : 0;
-    return { tags, visibleTagNames, visibleContacts, tagPositions, contactPositions, tagEdges: tagEdges.slice(0, 90), rankedTags, focusCount };
-  }, [contacts, focusTag, graphMode, tagQuery]);
+    return { tags, visibleTagNames, visibleContacts, focusedContacts: focusTag ? matchingContacts : [], tagPositions, contactPositions, tagEdges: tagEdges.slice(0, 90), rankedTags, focusCount };
+  }, [contacts, focusTag, graphMode, selectedLabel, showUnassigned, tagQuery]);
 
   const hovered = graph.visibleContacts.find((contact) => contact.id === hoveredContact);
 
@@ -189,21 +211,29 @@ export function ContactGraph({ contacts, onSelectContact }: {
       </div>
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-72">
         <div className="graph-mode-switch" role="radiogroup" aria-label="Group graph nodes by">
-          <button role="radio" aria-checked={graphMode === "labels"} className={graphMode === "labels" ? "active" : ""} onClick={() => { setGraphMode("labels"); setFocusTag(null); setTagQuery(""); }}><Tag />Tags</button>
-          <button role="radio" aria-checked={graphMode === "organizations"} className={graphMode === "organizations" ? "active" : ""} onClick={() => { setGraphMode("organizations"); setFocusTag(null); setTagQuery(""); }}><Building2 />Organizations</button>
+          <button role="radio" aria-checked={graphMode === "labels"} className={graphMode === "labels" ? "active" : ""} onClick={() => { setGraphMode("labels"); setFocusTag(selectedLabel); setTagQuery(""); }}><Tag />Tags</button>
+          <button role="radio" aria-checked={graphMode === "organizations"} className={graphMode === "organizations" ? "active" : ""} onClick={() => { setSelectedLabel((current) => current ?? (graphMode === "labels" ? focusTag : null)); setGraphMode("organizations"); setFocusTag(null); setTagQuery(""); }}><Building2 />Organizations</button>
         </div>
+        <label className="graph-tag-filter"><span>Filter by tag</span><NativeSelect className="w-full bg-white" value={selectedLabel ?? ""} onChange={(event) => { const label = event.target.value || null; setSelectedLabel(label); setFocusTag(graphMode === "labels" ? label : null); setTagQuery(""); }} aria-label="Filter graph by tag"><NativeSelectOption value="">All tags</NativeSelectOption>{labelOptions.map(([label, count]) => <NativeSelectOption key={label} value={label}>{label} ({count})</NativeSelectOption>)}</NativeSelect></label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#7b909b]" />
           <Input className="h-10 bg-white pl-9" value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} placeholder={graphMode === "labels" ? "Find a tag" : "Find an organization"} aria-label={graphMode === "labels" ? "Find a graph tag" : "Find a graph organization"} />
         </div>
-        {focusTag && <Button variant="outline" size="sm" className="justify-start bg-white" onClick={() => setFocusTag(null)}><RotateCcw />Show full graph</Button>}
+        {focusTag && <Button variant="outline" size="sm" className="justify-start bg-white" onClick={() => { setFocusTag(null); if (graphMode === "labels") setSelectedLabel(null); }}><RotateCcw />{graphMode === "organizations" && selectedLabel ? "Show all organizations in tag" : "Show full graph"}</Button>}
       </div>
     </div>
 
     <div className="graph-summary">
-      <div className="graph-summary-items"><span><Network className="size-4" />{graph.tags.length} {graphMode === "labels" ? "tag" : "organization"} nodes</span><span><UsersRound className="size-4" />{graph.visibleContacts.length} contact nodes shown</span><span>{graph.tagEdges.length} {graphMode === "labels" ? "tag" : "organization"} connections</span>{focusTag && <span className="graph-focus">Focused on {focusTag}</span>}</div>
+      <div className="graph-summary-items"><span><Network className="size-4" />{graph.tags.length} {graphMode === "labels" ? "tag" : "organization"} nodes</span><span><UsersRound className="size-4" />{graph.visibleContacts.length} contact nodes shown</span><span>{graph.tagEdges.length} {graphMode === "labels" ? "tag" : "organization"} connections</span>{selectedLabel && <span className="graph-focus">Tag: {selectedLabel} · {selectedLabelCount} people</span>}{focusTag && (graphMode === "organizations" || focusTag !== selectedLabel) && <span className="graph-focus">Focused on {focusTag}</span>}</div>
       <div className="zoom-controls" aria-label="Graph zoom controls"><Button size="icon" variant="outline" onClick={zoomOut} disabled={zoom <= 0.5} aria-label="Zoom graph out"><Minus /></Button><button className="zoom-level" onClick={() => setZoom(1)} aria-label="Reset graph zoom to 100 percent">{Math.round(zoom * 100)}%</button><Button size="icon" variant="outline" onClick={zoomIn} disabled={zoom >= 2} aria-label="Zoom graph in"><Plus /></Button><Button size="icon" variant="outline" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label="Reset graph zoom"><Maximize2 /></Button></div>
     </div>
+
+    {graphMode === "organizations" && selectedLabel && <section className="graph-distribution" aria-label={`Organization distribution for ${selectedLabel}`}>
+      <div className="graph-distribution-heading"><div><h2>Organizations in {selectedLabel}</h2><p>{selectedLabelCount} people across {graph.rankedTags.length} organization groups. Select a row to see its contacts.</p></div></div>
+      <div className="graph-distribution-list">{graph.rankedTags.map(({ tag, count }) => <button key={tag} type="button" className={focusTag === tag ? "active" : ""} onClick={() => setFocusTag(tag)} aria-pressed={focusTag === tag}>
+        <span className="graph-distribution-name" title={tag}>{tag}</span><span className="graph-distribution-bar"><span style={{ width: `${Math.max(2, count / Math.max(1, selectedLabelCount) * 100)}%` }} /></span><strong>{count}</strong><small>{Math.round(count / Math.max(1, selectedLabelCount) * 100)}%</small>
+      </button>)}</div>
+    </section>}
 
     <div className={`graph-focus-layout ${focusTag ? "focused" : ""}`}>
       <div className="graph-visual">
@@ -219,7 +249,7 @@ export function ContactGraph({ contacts, onSelectContact }: {
         <g className="contact-edges">
           {graph.visibleContacts.flatMap((contact) => {
             const point = graph.contactPositions.get(contact.id)!;
-            return groupsForContact(contact, graphMode).filter((tag) => graph.visibleTagNames.has(tag)).map((tag) => {
+            return groupNames(contact).filter((tag) => graph.visibleTagNames.has(tag)).map((tag) => {
               const target = graph.tagPositions.get(tag)!;
               return <line key={`${contact.id}-${tag}`} x1={point.x} y1={point.y} x2={target.x} y2={target.y} />;
             });
@@ -229,7 +259,7 @@ export function ContactGraph({ contacts, onSelectContact }: {
           {graph.visibleContacts.map((contact) => {
             const point = graph.contactPositions.get(contact.id)!;
             const active = hoveredContact === contact.id;
-            const showName = Boolean(focusTag && groupsForContact(contact, graphMode).includes(focusTag) && (graph.focusCount <= ALWAYS_LABEL_LIMIT || active));
+            const showName = Boolean(focusTag && groupNames(contact).includes(focusTag) && (graph.focusCount <= ALWAYS_LABEL_LIMIT || active));
             const onLeft = point.x < CENTER.x;
             const displayName = contact.name.length > 28 ? `${contact.name.slice(0, 27)}…` : contact.name;
             return <g key={contact.id} className={`${active ? "active" : ""} ${showName ? "named" : ""}`} tabIndex={0} role="button" aria-label={`Open ${contact.name}`}
@@ -246,7 +276,8 @@ export function ContactGraph({ contacts, onSelectContact }: {
             const point = graph.tagPositions.get(tag)!;
             const active = focusTag === tag;
             const radius = Math.min(34, 17 + Math.log2(count + 1) * 2.4);
-            return <g key={tag} className={active ? "active" : ""} role="button" tabIndex={0} aria-label={`Focus ${tag}, ${count} contacts`} onClick={() => setFocusTag(tag)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setFocusTag(tag); }}>
+            const focusNode = () => { setFocusTag(tag); if (graphMode === "labels") setSelectedLabel(tag); };
+            return <g key={tag} className={active ? "active" : ""} role="button" tabIndex={0} aria-label={`Focus ${tag}, ${count} contacts`} onClick={focusNode} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") focusNode(); }}>
               <circle cx={point.x} cy={point.y} r={radius + 10} className="graph-node-hit" style={{ fill: "transparent", stroke: "none" }} />
               <circle cx={point.x} cy={point.y} r={radius} />
               <text x={point.x} y={point.y - 2} textAnchor="middle">{tag.length > 18 ? `${tag.slice(0, 17)}…` : tag}</text>
@@ -262,20 +293,22 @@ export function ContactGraph({ contacts, onSelectContact }: {
       </button>}
     </div>
 
-      <div className="graph-note">{focusTag
+      <div className="graph-note">{graphMode === "organizations" && selectedLabel && !focusTag
+        ? `Showing organizations for people tagged ${selectedLabel}. Counts in the distribution include every organization; the graph displays up to ${TAG_LIMIT} matching nodes.`
+        : focusTag
         ? graph.focusCount <= ALWAYS_LABEL_LIMIT
-          ? `Showing the people ${graphMode === "labels" ? `tagged ${focusTag}` : `at ${focusTag}`}, with names displayed beside their outer nodes. Select a person to edit the contact.`
-          : `Showing ${Math.min(FOCUSED_CONTACT_LIMIT, graph.focusCount)} of ${graph.focusCount} people ${graphMode === "labels" ? `tagged ${focusTag}` : `at ${focusTag}`}. Names appear in the list below; select a person to edit the contact.`
+          ? `Showing the people ${graphMode === "labels" ? `tagged ${focusTag}` : `at ${focusTag}${selectedLabel ? ` who are tagged ${selectedLabel}` : ""}`}, with names displayed beside their outer nodes. Select a person to edit the contact.`
+          : `Showing ${Math.min(FOCUSED_CONTACT_LIMIT, graph.focusCount)} of ${graph.focusCount} people ${graphMode === "labels" ? `tagged ${focusTag}` : `at ${focusTag}${selectedLabel ? ` who are tagged ${selectedLabel}` : ""}`}. Names appear in the list below; select a person to edit the contact.`
         : `Showing the ${CONTACT_LIMIT} most relevant contacts for the visible ${graphMode === "labels" ? "tags" : "organizations"}. Select a node to reveal its people${graphMode === "labels" ? " and strongest neighboring tags" : ""}.`}
       </div>
       </div>
       {focusTag && <aside className="graph-people-list" aria-label={`Contacts ${graphMode === "labels" ? "tagged" : "at"} ${focusTag}`}>
         <div className="graph-people-header"><div><span>People in</span><strong>{focusTag}</strong></div><small>{graph.focusCount.toLocaleString()} total</small></div>
-        <div className="graph-people-scroll">{graph.visibleContacts.map((contact) => <button key={contact.id} onClick={() => onSelectContact(contact.id)} onMouseEnter={() => setHoveredContact(contact.id)} onMouseLeave={() => setHoveredContact(null)}>
+        <div className="graph-people-scroll">{graph.focusedContacts.map((contact) => <button key={contact.id} onClick={() => onSelectContact(contact.id)} onMouseEnter={() => setHoveredContact(contact.id)} onMouseLeave={() => setHoveredContact(null)}>
           <span className="graph-list-avatar">{contact.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>
           <span className="graph-list-copy"><strong>{contact.name}</strong><small>{[contact.role, contact.organization].filter(Boolean).join(" · ") || "No organization details"}</small></span>
         </button>)}</div>
-        {graph.focusCount > graph.visibleContacts.length && <p className="graph-list-limit">Showing the first {graph.visibleContacts.length} contacts. Refine the group when more filtering is added.</p>}
+        {graph.focusCount > graph.visibleContacts.length && <p className="graph-list-limit">All contacts are listed here; the graph shows the first {graph.visibleContacts.length} outer nodes.</p>}
       </aside>}
     </div>
   </div>;
