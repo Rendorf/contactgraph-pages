@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const tracked = execFileSync("git", ["ls-files", "-z"]).toString("utf8").split("\0").filter(Boolean);
-const firebaseFiles = new Set(["README.md", "api.ts", "auth-context.tsx", "backup-firestore.mjs", "check-artifact.mjs", "check-permissions.mjs", "check-source.mjs", "export-duckdb.py", "firebase.json", "firebase.ts", "firestore.rules", "firestore.rules.test.mjs", "import-firestore.mjs", "index.html", "main.tsx", "migration.test.mjs", "offline-status.tsx", "offline.ts", "osint-module.tsx", "permission-catalog.json", "settings-module.tsx", "vite-env.d.ts"]);
+const firebaseFiles = new Set(["README.md", "api.ts", "auth-context.tsx", "backup-firestore.mjs", "check-artifact.mjs", "check-permissions.mjs", "check-source.mjs", "export-duckdb.py", "firebase.json", "firebase.ts", "firestore.rules", "firestore.rules.test.mjs", "import-firestore.mjs", "index.html", "main.tsx", "migration.test.mjs", "offline-status.tsx", "offline.ts", "osint-module.tsx", "permission-catalog.json", "quota.mjs", "quota.test.mjs", "settings-module.tsx", "vite-env.d.ts"]);
 const allowed = (file) => file === ".gitignore"
   || file === "package.json" || file === "package-lock.json" || file === "postcss.config.mjs"
   || file === "tsconfig.json" || file === "vite.firebase.config.ts"

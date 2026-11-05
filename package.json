@@ -14,6 +14,7 @@
     "check:firebase-permissions": "node firebase-pages/check-permissions.mjs",
     "check:firebase-source": "node firebase-pages/check-source.mjs",
     "test:firebase-rules": "firebase emulators:exec --only firestore --project demo-contactgraph --config firebase-pages/firebase.json \"node --test firebase-pages/firestore.rules.test.mjs firebase-pages/migration.test.mjs\"",
+    "test:firebase-quota": "node --test firebase-pages/quota.test.mjs",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",

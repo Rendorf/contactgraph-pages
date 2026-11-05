@@ -1,7 +1,8 @@
 import { doc, getDoc, collection, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
-import { requireFirebase, secureSignOut } from "./firebase";
+import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
 import permissionModules from "./permission-catalog.json";
 import { overlay, queueDelete, queuePut, syncPending } from "./offline";
+import { isFirestoreQuotaExceeded } from "./quota.mjs";
 
 type Json = Record<string, any>;
 type Item = Json & { id: string; revision?: number };
@@ -11,7 +12,9 @@ const live = new Map<string, { rows: Item[]; ready: Promise<void>; stop: () => v
 const cacheKey = (name: string, id: string) => `${name}/${id}`;
 const networkFailure = (error: unknown) => !navigator.onLine || (typeof error === "object" && error !== null && "code" in error && ["unavailable", "deadline-exceeded", "cancelled"].includes(String(error.code)));
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const errorResponse = (error: unknown) => response({ error: error instanceof Error ? error.message : "Request failed" }, 400);
+const errorResponse = (error: unknown) => isFirestoreQuotaExceeded(error)
+  ? response({ error: "Shared database quota is exhausted. Keep your edits open and try again after the daily reset at midnight Pacific Time. On a trusted device, enable offline access in Settings → Account to queue future edits." }, 429)
+  : response({ error: error instanceof Error ? error.message : "Request failed" }, 400);
 const cleanId = (value: string) => {
   if (!value || value.length > 200 || value.includes("/") || value === "." || value === "..") throw new Error("Invalid record ID.");
   return value;
@@ -69,7 +72,11 @@ const put = async (name: string, item: Item, create: boolean) => {
     const next = { ...persisted, id, revision: Number(prior?.revision ?? 0) + 1, updated_at: new Date().toISOString(), updated_by: auth.currentUser?.uid ?? "" };
     tx.set(ref, next);
     return _photoUrl ? { ...next, photo_url: _photoUrl } : next;
-  }); } catch (error) { if (networkFailure(error)) return queuePut(name, item); throw error; }
+  }); } catch (error) {
+    if (networkFailure(error)) return queuePut(name, item);
+    if (isFirestoreQuotaExceeded(error) && isTrustedDevice()) return queuePut(name, item);
+    throw error;
+  }
   knownRevisions.set(cacheKey(name, id), Number(saved.revision));
   return saved;
 };

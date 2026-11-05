@@ -13,11 +13,12 @@ export function OfflineStatus() {
   useEffect(() => {
     refresh();
     if (navigator.onLine) void syncPending().then(refresh);
+    const retry = window.setInterval(() => { if (navigator.onLine) void syncPending().then(refresh).catch(() => undefined); }, 15 * 60 * 1000);
     const update = () => { setConnected(navigator.onLine); refresh(); };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     window.addEventListener("contactgraph:outbox", update);
-    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); window.removeEventListener("contactgraph:outbox", update); };
+    return () => { window.clearInterval(retry); window.removeEventListener("online", update); window.removeEventListener("offline", update); window.removeEventListener("contactgraph:outbox", update); };
   }, []);
   const conflicts = pending.filter((item) => item.status === "conflict");
   const resolve = async (item: Pending, choice: "mine" | "server") => {

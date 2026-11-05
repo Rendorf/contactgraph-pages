@@ -1,6 +1,7 @@
 import { doc, runTransaction } from "firebase/firestore";
 import { db, auth, isTrustedDevice } from "./firebase";
 import { toast } from "sonner";
+import { isFirestoreQuotaExceeded } from "./quota.mjs";
 
 export type Pending = { key: string; collection: string; id: string; uid: string; op: "put" | "delete"; item?: Record<string, any>; baseRevision: number; status: "pending" | "conflict"; remote?: Record<string, any> | null; createdAt: string };
 const DATABASE = "contactgraph-outbox-v1";
@@ -69,7 +70,8 @@ export async function overlay<T extends { id: string }>(collection: string, rows
   }
   return [...map.values()];
 }
-export async function syncPending() {
+let syncInFlight: Promise<void> | null = null;
+async function runSyncPending() {
   if (!navigator.onLine || !db || !auth?.currentUser || !isTrustedDevice()) return;
   for (const item of (await getPending()).filter((value) => value.status === "pending")) {
     const ref = doc(db, item.collection, item.id);
@@ -87,12 +89,17 @@ export async function syncPending() {
       if (result.conflict) await save({ ...item, status: "conflict", remote: result.remote });
       else await discard(item);
     } catch (error) {
-      // Permission and validation failures stay in the outbox for explicit review.
-      if (navigator.onLine) await save({ ...item, status: "conflict", remote: null });
+      // A depleted daily quota is temporary; keep the edit pending for retry.
+      // Permission and validation failures still need explicit conflict review.
+      if (navigator.onLine && !isFirestoreQuotaExceeded(error)) await save({ ...item, status: "conflict", remote: null });
       break;
     }
   }
   changed();
+}
+export function syncPending(): Promise<void> {
+  if (!syncInFlight) syncInFlight = runSyncPending().finally(() => { syncInFlight = null; });
+  return syncInFlight;
 }
 export async function resolveConflict(key: string, choice: "mine" | "server") {
   const item = (await getPending()).find((value) => value.key === key && value.status === "conflict");

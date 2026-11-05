@@ -23,6 +23,7 @@ jobs:
       - run: npm run check:firebase-source
       - run: npx tsc --noEmit --pretty false
       - run: npm run check:firebase-permissions
+      - run: npm run test:firebase-quota
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
