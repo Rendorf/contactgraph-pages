@@ -32,6 +32,7 @@ export async function secureSignOut(discardPending = false) {
 export async function setTrustedDevice(enabled: boolean) {
   if (!enabled && trusted) await secureSignOut();
   window.localStorage.setItem("contactgraph-trusted-device", enabled ? "1" : "0");
+  trusted = enabled;
 }
 
 export function isTrustedDevice() { return trusted; }
