@@ -441,6 +441,29 @@ function TagFilter({ counts, selected, query, onQueryChange, onToggle, onClear, 
   </div>;
 }
 
+function ContactAttributeFilters({ idPrefix, position, organization, positions, organizations, onPositionChange, onOrganizationChange }: {
+  idPrefix: string;
+  position: string;
+  organization: string;
+  positions: string[];
+  organizations: string[];
+  onPositionChange: (value: string) => void;
+  onOrganizationChange: (value: string) => void;
+}) {
+  return <div className="mb-4 space-y-3 border-b border-[#d8e2e6] pb-4">
+    <div className="text-sm font-semibold">Position &amp; organization</div>
+    <label className="block text-xs font-semibold text-[#58727d]" htmlFor={`${idPrefix}-position`}>Position
+      <Input id={`${idPrefix}-position`} type="search" list={`${idPrefix}-positions`} className="mt-1 h-10 bg-white text-sm" value={position} onChange={(event) => onPositionChange(event.target.value)} placeholder="Search positions" />
+    </label>
+    <datalist id={`${idPrefix}-positions`}>{positions.map((value) => <option key={value} value={value} />)}</datalist>
+    <label className="block text-xs font-semibold text-[#58727d]" htmlFor={`${idPrefix}-organization`}>Organization
+      <Input id={`${idPrefix}-organization`} type="search" list={`${idPrefix}-organizations`} className="mt-1 h-10 bg-white text-sm" value={organization} onChange={(event) => onOrganizationChange(event.target.value)} placeholder="Search organizations" />
+    </label>
+    <datalist id={`${idPrefix}-organizations`}>{organizations.map((value) => <option key={value} value={value} />)}</datalist>
+    {(position || organization) && <button type="button" className="text-xs font-semibold text-[#087f8c]" onClick={() => { onPositionChange(""); onOrganizationChange(""); }}>Clear position and organization</button>}
+  </div>;
+}
+
 function Navigation({ activeModule, contactCount, birthdayCount, osintAvailable, mobile = false, onSelect }: {
   activeModule: Module;
   contactCount: number;
@@ -493,6 +516,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [positionFilter, setPositionFilter] = useState("");
+  const [organizationFilter, setOrganizationFilter] = useState("");
   const [selectedLetter, setSelectedLetter] = useState("");
   const [tagQuery, setTagQuery] = useState("");
   const [editorContact, setEditorContact] = useState<Contact | null>(null);
@@ -561,10 +586,16 @@ export default function Home() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [contacts]);
   const organizationSuggestions = useMemo(() => [...new Set(contacts.map((contact) => contact.organization?.trim()).filter((organization): organization is string => Boolean(organization)))].sort((a, b) => a.localeCompare(b)), [contacts]);
+  const positionSuggestions = useMemo(() => [...new Set(contacts.map((contact) => contact.role?.trim()).filter((position): position is string => Boolean(position)))].sort((a, b) => a.localeCompare(b)), [contacts]);
   const matchingContacts = useMemo(() => {
     const needle = normalize(query.trim());
-    return contacts.filter((contact) => (!needle || contactSearchText(contact).includes(needle)) && selectedTags.every((tag) => (contact.labels ?? []).includes(tag)));
-  }, [contacts, query, selectedTags]);
+    const positionNeedle = normalize(positionFilter.trim());
+    const organizationNeedle = normalize(organizationFilter.trim());
+    return contacts.filter((contact) => (!needle || contactSearchText(contact).includes(needle))
+      && (!positionNeedle || normalize(contact.role).includes(positionNeedle))
+      && (!organizationNeedle || normalize(contact.organization).includes(organizationNeedle))
+      && selectedTags.every((tag) => (contact.labels ?? []).includes(tag)));
+  }, [contacts, query, selectedTags, positionFilter, organizationFilter]);
   const availableLetters = useMemo(() => [...new Set(matchingContacts.map((contact) => contactInitial(contact.name)))].sort((a, b) => {
     if (a === "#") return 1;
     if (b === "#") return -1;
@@ -781,6 +812,10 @@ export default function Home() {
   };
   const clearTags = () => { setSelectedTags([]); setVisibleCount(80); };
   const tagFilterProps = { counts: tagCounts, selected: selectedTags, query: tagQuery, onQueryChange: setTagQuery, onToggle: toggleTag, onClear: clearTags, onMerge: () => setTagMergeOpen(true) };
+  const updatePositionFilter = (value: string) => { setPositionFilter(value); setSelectedLetter(""); setVisibleCount(80); };
+  const updateOrganizationFilter = (value: string) => { setOrganizationFilter(value); setSelectedLetter(""); setVisibleCount(80); };
+  const attributeFilterProps = { position: positionFilter, organization: organizationFilter, positions: positionSuggestions, organizations: organizationSuggestions, onPositionChange: updatePositionFilter, onOrganizationChange: updateOrganizationFilter };
+  const activeFilterCount = selectedTags.length + Number(Boolean(positionFilter.trim())) + Number(Boolean(organizationFilter.trim()));
   const signOut = async () => {
     let response = await fetch("/api/auth/logout", { method: "POST" });
     if (!response.ok) {
@@ -809,9 +844,9 @@ export default function Home() {
       </header>
 
       {visibleModule === "contacts" ? <div className="contacts-module">
-        <aside className="tag-sidebar"><TagFilter {...tagFilterProps} /></aside>
+        <aside className="tag-sidebar"><div className="flex min-h-0 flex-1 flex-col"><ContactAttributeFilters idPrefix="desktop-contact-filter" {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></div></aside>
         <section className="contacts-content">
-          <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || can("contacts.merge")) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
+          <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{positionFilter.trim() && <button className="tag-pill bg-white" onClick={() => updatePositionFilter("")}>Position: {positionFilter.trim()}<X className="size-3.5" /></button>}{organizationFilter.trim() && <button className="tag-pill bg-white" onClick={() => updateOrganizationFilter("")}>Organization: {organizationFilter.trim()}<X className="size-3.5" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || can("contacts.merge")) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
           {!loading && <nav className="contact-alphabet" aria-label="Filter contacts by first letter">
             <button className={selectedLetter === "" ? "active" : ""} type="button" aria-pressed={selectedLetter === ""} onClick={() => { setSelectedLetter(""); setVisibleCount(80); }}>All</button>
             {availableLetters.map((letter) => <button className={selectedLetter === letter ? "active" : ""} type="button" key={letter} aria-pressed={selectedLetter === letter} aria-label={letter === "#" ? "Names not starting with a letter" : `Names starting with ${letter}`} onClick={() => { setSelectedLetter(letter); setVisibleCount(80); }}>{letter}</button>)}
@@ -827,7 +862,7 @@ export default function Home() {
             </div>
           </div>}
           {loading ? <div className="contact-grid">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-40 animate-pulse rounded-2xl border border-[#d8e3e8] bg-white/70" />)}</div>
-          : filteredContacts.length === 0 ? <div className="empty-state"><Search /><h2>No contacts found</h2><p>{selectedLetter ? `No matching names start with ${selectedLetter}. Choose another letter or All.` : "Try another search or clear a tag filter."}</p></div>
+          : filteredContacts.length === 0 ? <div className="empty-state"><Search /><h2>No contacts found</h2><p>{selectedLetter ? `No matching names start with ${selectedLetter}. Choose another letter or All.` : "Try another search or clear a filter."}</p></div>
           : <><div className="contact-grid">{filteredContacts.slice(0, visibleCount).map((contact, index) => { const selected = selectedIds.has(contact.id); return <article key={contact.id} className={`contact-card ${selected ? "selected" : ""}`}>
             {selectionMode && <label className="contact-selector"><input type="checkbox" checked={selected} onChange={() => toggleContactSelection(contact.id)} aria-label={`Select ${contact.name}`} /><span><Check /></span></label>}
             <button className="contact-card-main" onClick={() => selectionMode ? toggleContactSelection(contact.id) : openContact(contact)} aria-label={selectionMode ? `Select ${contact.name}` : `Edit ${contact.name}`}>
@@ -843,8 +878,8 @@ export default function Home() {
     </div>
 
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} birthdayCount={todaysBirthdayCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>
-    <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Choose one or more tags.</SheetDescription></SheetHeader><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
-    {visibleModule === "contacts" && <Button className="mobile-filter-button" onClick={() => setFiltersOpen(true)}><Tag />Filters{selectedTags.length > 0 && <span>{selectedTags.length}</span>}</Button>}
+    <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Search by position or organization and choose tags.</SheetDescription></SheetHeader><ContactAttributeFilters idPrefix="mobile-contact-filter" {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
+    {visibleModule === "contacts" && <Button className="mobile-filter-button" onClick={() => setFiltersOpen(true)}><Tag />Filters{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Button>}
     <AlertDialog open={bulkAction !== null} onOpenChange={(open) => { if (!open && !bulkSaving) setBulkAction(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
