@@ -441,26 +441,38 @@ function TagFilter({ counts, selected, query, onQueryChange, onToggle, onClear, 
   </div>;
 }
 
-function ContactAttributeFilters({ idPrefix, position, organization, positions, organizations, onPositionChange, onOrganizationChange }: {
-  idPrefix: string;
-  position: string;
-  organization: string;
+function ContactValueFilter({ label, values, selected, onChange }: {
+  label: string;
+  values: string[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const shown = values.filter((value) => normalize(value).includes(normalize(search.trim())));
+  const toggle = (value: string) => onChange(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+  return <div className="min-w-0">
+    <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#cbdce2] bg-white px-3 py-2 text-left text-xs font-semibold text-[#385767]" aria-expanded={open} onClick={() => setOpen(!open)}><span className="min-w-0 truncate">{label}: {selected.length ? `${selected.length} selected` : "All"}</span><ChevronDown className={`size-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} /></button>
+    {open && <div className="mt-2 rounded-lg border border-[#d8e2e6] bg-white p-2">
+      <Input type="search" className="h-9 text-sm" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Find ${label.toLowerCase()}`} aria-label={`Find ${label.toLowerCase()}`} />
+      <div className="my-2 flex justify-between gap-2 text-xs font-semibold"><button type="button" className="text-[#087f8c]" onClick={() => onChange([...new Set([...selected, ...shown])])} disabled={!shown.length}>Select shown</button><button type="button" className="text-[#087f8c]" onClick={() => onChange([])} disabled={!selected.length}>Show all</button></div>
+      <div className="scrollbar-thin max-h-44 space-y-0.5 overflow-y-auto" role="group" aria-label={`${label} choices`}>{shown.length ? shown.map((value) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 text-xs text-[#385767] hover:bg-[#eef5f6]"><input type="checkbox" className="size-4 shrink-0 accent-[#087f8c]" checked={selected.includes(value)} onChange={() => toggle(value)} /><span className="min-w-0 break-words">{value}</span></label>) : <p className="px-1.5 py-2 text-xs text-[#71858f]">No matching values.</p>}</div>
+    </div>}
+  </div>;
+}
+
+function ContactAttributeFilters({ positions, organizations, selectedPositions, selectedOrganizations, onPositionsChange, onOrganizationsChange }: {
   positions: string[];
   organizations: string[];
-  onPositionChange: (value: string) => void;
-  onOrganizationChange: (value: string) => void;
+  selectedPositions: string[];
+  selectedOrganizations: string[];
+  onPositionsChange: (values: string[]) => void;
+  onOrganizationsChange: (values: string[]) => void;
 }) {
-  return <div className="mb-4 space-y-3 border-b border-[#d8e2e6] pb-4">
+  return <div className="mb-4 space-y-2 border-b border-[#d8e2e6] pb-4">
     <div className="text-sm font-semibold">Position &amp; organization</div>
-    <label className="block text-xs font-semibold text-[#58727d]" htmlFor={`${idPrefix}-position`}>Position
-      <Input id={`${idPrefix}-position`} type="search" list={`${idPrefix}-positions`} className="mt-1 h-10 bg-white text-sm" value={position} onChange={(event) => onPositionChange(event.target.value)} placeholder="Search positions" />
-    </label>
-    <datalist id={`${idPrefix}-positions`}>{positions.map((value) => <option key={value} value={value} />)}</datalist>
-    <label className="block text-xs font-semibold text-[#58727d]" htmlFor={`${idPrefix}-organization`}>Organization
-      <Input id={`${idPrefix}-organization`} type="search" list={`${idPrefix}-organizations`} className="mt-1 h-10 bg-white text-sm" value={organization} onChange={(event) => onOrganizationChange(event.target.value)} placeholder="Search organizations" />
-    </label>
-    <datalist id={`${idPrefix}-organizations`}>{organizations.map((value) => <option key={value} value={value} />)}</datalist>
-    {(position || organization) && <button type="button" className="text-xs font-semibold text-[#087f8c]" onClick={() => { onPositionChange(""); onOrganizationChange(""); }}>Clear position and organization</button>}
+    <ContactValueFilter label="Position" values={positions} selected={selectedPositions} onChange={onPositionsChange} />
+    <ContactValueFilter label="Organization" values={organizations} selected={selectedOrganizations} onChange={onOrganizationsChange} />
   </div>;
 }
 
@@ -516,8 +528,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [positionFilter, setPositionFilter] = useState("");
-  const [organizationFilter, setOrganizationFilter] = useState("");
+  const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
+  const [selectedOrganizations, setSelectedOrganizations] = useState<string[]>([]);
   const [selectedLetter, setSelectedLetter] = useState("");
   const [tagQuery, setTagQuery] = useState("");
   const [editorContact, setEditorContact] = useState<Contact | null>(null);
@@ -589,13 +601,11 @@ export default function Home() {
   const positionSuggestions = useMemo(() => [...new Set(contacts.map((contact) => contact.role?.trim()).filter((position): position is string => Boolean(position)))].sort((a, b) => a.localeCompare(b)), [contacts]);
   const matchingContacts = useMemo(() => {
     const needle = normalize(query.trim());
-    const positionNeedle = normalize(positionFilter.trim());
-    const organizationNeedle = normalize(organizationFilter.trim());
     return contacts.filter((contact) => (!needle || contactSearchText(contact).includes(needle))
-      && (!positionNeedle || normalize(contact.role).includes(positionNeedle))
-      && (!organizationNeedle || normalize(contact.organization).includes(organizationNeedle))
+      && (!selectedPositions.length || selectedPositions.includes(contact.role?.trim() ?? ""))
+      && (!selectedOrganizations.length || selectedOrganizations.includes(contact.organization?.trim() ?? ""))
       && selectedTags.every((tag) => (contact.labels ?? []).includes(tag)));
-  }, [contacts, query, selectedTags, positionFilter, organizationFilter]);
+  }, [contacts, query, selectedTags, selectedPositions, selectedOrganizations]);
   const availableLetters = useMemo(() => [...new Set(matchingContacts.map((contact) => contactInitial(contact.name)))].sort((a, b) => {
     if (a === "#") return 1;
     if (b === "#") return -1;
@@ -812,10 +822,10 @@ export default function Home() {
   };
   const clearTags = () => { setSelectedTags([]); setVisibleCount(80); };
   const tagFilterProps = { counts: tagCounts, selected: selectedTags, query: tagQuery, onQueryChange: setTagQuery, onToggle: toggleTag, onClear: clearTags, onMerge: () => setTagMergeOpen(true) };
-  const updatePositionFilter = (value: string) => { setPositionFilter(value); setSelectedLetter(""); setVisibleCount(80); };
-  const updateOrganizationFilter = (value: string) => { setOrganizationFilter(value); setSelectedLetter(""); setVisibleCount(80); };
-  const attributeFilterProps = { position: positionFilter, organization: organizationFilter, positions: positionSuggestions, organizations: organizationSuggestions, onPositionChange: updatePositionFilter, onOrganizationChange: updateOrganizationFilter };
-  const activeFilterCount = selectedTags.length + Number(Boolean(positionFilter.trim())) + Number(Boolean(organizationFilter.trim()));
+  const updatePositions = (values: string[]) => { setSelectedPositions(values); setSelectedLetter(""); setVisibleCount(80); };
+  const updateOrganizations = (values: string[]) => { setSelectedOrganizations(values); setSelectedLetter(""); setVisibleCount(80); };
+  const attributeFilterProps = { selectedPositions, selectedOrganizations, positions: positionSuggestions, organizations: organizationSuggestions, onPositionsChange: updatePositions, onOrganizationsChange: updateOrganizations };
+  const activeFilterCount = selectedTags.length + selectedPositions.length + selectedOrganizations.length;
   const signOut = async () => {
     let response = await fetch("/api/auth/logout", { method: "POST" });
     if (!response.ok) {
@@ -844,9 +854,9 @@ export default function Home() {
       </header>
 
       {visibleModule === "contacts" ? <div className="contacts-module">
-        <aside className="tag-sidebar"><div className="flex min-h-0 flex-1 flex-col"><ContactAttributeFilters idPrefix="desktop-contact-filter" {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></div></aside>
+        <aside className="tag-sidebar overflow-y-auto"><div className="flex min-h-0 flex-1 flex-col"><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></div></aside>
         <section className="contacts-content">
-          <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{positionFilter.trim() && <button className="tag-pill bg-white" onClick={() => updatePositionFilter("")}>Position: {positionFilter.trim()}<X className="size-3.5" /></button>}{organizationFilter.trim() && <button className="tag-pill bg-white" onClick={() => updateOrganizationFilter("")}>Organization: {organizationFilter.trim()}<X className="size-3.5" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || can("contacts.merge")) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
+          <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{selectedPositions.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updatePositions([])}><span className="truncate">Position: {selectedPositions.length === 1 ? selectedPositions[0] : `${selectedPositions.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedOrganizations.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updateOrganizations([])}><span className="truncate">Organization: {selectedOrganizations.length === 1 ? selectedOrganizations[0] : `${selectedOrganizations.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || can("contacts.merge")) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
           {!loading && <nav className="contact-alphabet" aria-label="Filter contacts by first letter">
             <button className={selectedLetter === "" ? "active" : ""} type="button" aria-pressed={selectedLetter === ""} onClick={() => { setSelectedLetter(""); setVisibleCount(80); }}>All</button>
             {availableLetters.map((letter) => <button className={selectedLetter === letter ? "active" : ""} type="button" key={letter} aria-pressed={selectedLetter === letter} aria-label={letter === "#" ? "Names not starting with a letter" : `Names starting with ${letter}`} onClick={() => { setSelectedLetter(letter); setVisibleCount(80); }}>{letter}</button>)}
@@ -878,7 +888,7 @@ export default function Home() {
     </div>
 
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} birthdayCount={todaysBirthdayCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>
-    <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Search by position or organization and choose tags.</SheetDescription></SheetHeader><ContactAttributeFilters idPrefix="mobile-contact-filter" {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
+    <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] overflow-y-auto border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Select one or more positions, organizations and tags.</SheetDescription></SheetHeader><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
     {visibleModule === "contacts" && <Button className="mobile-filter-button" onClick={() => setFiltersOpen(true)}><Tag />Filters{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Button>}
     <AlertDialog open={bulkAction !== null} onOpenChange={(open) => { if (!open && !bulkSaving) setBulkAction(null); }}>
       <AlertDialogContent>
