@@ -88,3 +88,16 @@ test("three-way sync requests are authorized, single-flight, and cannot forge re
   await env.withSecurityRulesDisabled(async (context) => context.firestore().doc(path).set({ id: "threeway", status: "idle", worker_seen_at: "2026-11-04T11:00:00.000Z" }));
   await assertSucceeds(owner.doc(path).update({ status: "queued", request_id: "33333333-3333-4333-8333-333333333333", requested_at: "2026-11-04T12:00:00.000Z", requested_by: "owner-uid" }));
 });
+
+test("canvas Kanban validates board-local columns and enforces existing permissions", async () => {
+  const board = { id: "kanban-board", title: "Board", nodes: [], revision: 1, updated_at: "2026-11-06T00:00:00Z", updated_by: "owner-uid",
+    kanban: { columns: { todo: "To do" }, column_order: ["todo"], assignments: {}, card_order: [] } };
+  await assertFails(assistant.doc("canvases/kanban-board").set({ ...board, updated_by: "assistant-uid" }));
+  await assertFails(env.unauthenticatedContext().firestore().doc("canvases/kanban-board").set(board));
+  await assertSucceeds(owner.doc("canvases/kanban-board").set(board));
+  const updated = { ...board, revision: 2 };
+  await assertFails(owner.doc("canvases/kanban-board").set({ ...updated, kanban: { ...board.kanban, assignments: { card: "other-board-status" } } }));
+  await assertFails(owner.doc("canvases/kanban-board").set({ ...updated, kanban: { ...board.kanban, column_order: ["todo", "todo"] } }));
+  await assertFails(owner.doc("canvases/kanban-board").set({ ...updated, kanban: { ...board.kanban, columns: { todo: 42 } } }));
+  await assertSucceeds(owner.doc("canvases/kanban-board").set({ ...updated, kanban: { ...board.kanban, columns: { todo: "Ready" } } }));
+});

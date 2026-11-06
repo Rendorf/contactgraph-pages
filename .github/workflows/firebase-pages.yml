@@ -2,6 +2,7 @@ name: Publish ContactGraph Pages
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,6 +25,7 @@ jobs:
       - run: npx tsc --noEmit --pretty false
       - run: npm run check:firebase-permissions
       - run: npm run test:firebase-quota
+      - run: npm run test:canvas-kanban
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -54,6 +56,7 @@ jobs:
         with:
           path: firebase-pages-dist
   deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

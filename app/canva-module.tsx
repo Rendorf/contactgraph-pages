@@ -10,10 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "./auth-context";
+import { CanvasKanban, readKanban, validateKanban, type Kanban } from "./canvas-kanban";
 
 type CanvasContact = { id: string; name: string; organization?: string; role?: string };
 type CanvasNode = { id: string; title: string; notes: string; x: number; y: number; width: number; height: number; contact_ids: string[] };
-type CanvasRecord = { id: string; title: string; created_at: string; updated_at: string; nodes: CanvasNode[] };
+type CanvasRecord = { id: string; title: string; created_at: string; updated_at: string; nodes: CanvasNode[]; kanban?: Partial<Kanban> };
 
 const STAGE_WIDTH = 1200;
 const STAGE_HEIGHT = 760;
@@ -37,6 +38,15 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [contactQuery, setContactQuery] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [view, setView] = useState<"freeform" | "kanban">("freeform");
+  useEffect(() => {
+    try { setView(localStorage.getItem(`contactgraph:canvas-view:${activeId}`) === "kanban" ? "kanban" : "freeform"); }
+    catch { setView("freeform"); }
+  }, [activeId]);
+  const changeView = (next: "freeform" | "kanban") => {
+    setView(next);
+    try { localStorage.setItem(`contactgraph:canvas-view:${activeId}`, next); } catch { /* View preference is optional. */ }
+  };
   const stageScrollRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -64,7 +74,7 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
       stage.removeEventListener("touchend", end);
       stage.removeEventListener("touchcancel", end);
     };
-  }, [draft?.id]);
+  }, [draft?.id, view]);
 
   useEffect(() => {
     fetch("/api/canvases").then(async (response) => {
@@ -90,6 +100,7 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
   }, [activeId, dirty]);
 
   const chooseCanvas = (canvas: CanvasRecord) => {
+    if (saving) return;
     if (dirty && !window.confirm("Discard unsaved changes and open another canvas?")) return;
     setActiveId(canvas.id);
     setDraft(structuredClone(canvas));
@@ -97,11 +108,13 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
     setEditingNodeId(null);
   };
   const updateDraft = (updater: (canvas: CanvasRecord) => CanvasRecord) => {
+    if (saving || !can("canvases.manage")) return;
     setDraft((current) => current ? updater(current) : current);
     setDirty(true);
   };
   const createCanvas = async () => {
-    if (!newTitle.trim()) return;
+    if (saving || !newTitle.trim()) return;
+    if (dirty && !window.confirm("Discard unsaved changes and create another canvas?")) return;
     setSaving(true);
     try {
       const response = await fetch("/api/canvases", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: newTitle.trim(), nodes: [] }) });
@@ -117,6 +130,7 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
     if (!draft) return;
     setSaving(true);
     try {
+      validateKanban(draft.kanban ?? {}, draft.nodes.map(node => node.id));
       const response = await fetch(`/api/canvases/${encodeURIComponent(draft.id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
       const body = await response.json().catch(() => ({})) as { canvas?: CanvasRecord; error?: string };
       if (!response.ok || !body.canvas) throw new Error(body.error ?? "Canvas could not be saved");
@@ -144,7 +158,15 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
     setEditingNodeId(node.id);
   };
   const updateNode = (id: string, changes: Partial<CanvasNode>) => updateDraft((canvas) => ({ ...canvas, nodes: canvas.nodes.map((node) => node.id === id ? { ...node, ...changes } : node) }));
-  const deleteNode = (id: string) => { updateDraft((canvas) => ({ ...canvas, nodes: canvas.nodes.filter((node) => node.id !== id) })); setEditingNodeId(null); };
+  const deleteNode = (id: string) => {
+    updateDraft(canvas => {
+      const board = readKanban(canvas.kanban);
+      const assignments = { ...board.assignments };
+      delete assignments[id];
+      return { ...canvas, nodes: canvas.nodes.filter(node => node.id !== id), kanban: { ...board, assignments, card_order: board.card_order.filter(key => key !== id) } };
+    });
+    setEditingNodeId(null);
+  };
   const beginDrag = (event: ReactPointerEvent, node: CanvasNode) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -204,13 +226,22 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
   const needle = contactQuery.trim().toLocaleLowerCase();
   const matchedContacts = contacts.filter((contact) => !editingNode?.contact_ids.includes(contact.id) && (!needle || `${contact.name} ${contact.organization ?? ""} ${contact.role ?? ""}`.toLocaleLowerCase().includes(needle))).slice(0, 100);
 
-  if (!can("canvases.manage")) return <main className="canva-module"><div className="module-heading"><div><p className="eyebrow">Thinking spaces</p><h1 className="module-title">Canva</h1></div></div><div className="canva-layout"><aside className="canva-list"><header><strong>Canvases</strong><span>{canvases.length}</span></header>{canvases.map(canvas => <button key={canvas.id} className={activeId === canvas.id ? "active" : ""} onClick={() => chooseCanvas(canvas)}><LayoutDashboard /><span><strong>{canvas.title}</strong><small>{canvas.nodes.length} nodes</small></span></button>)}</aside><section className="canva-workspace">{draft?.nodes.map(node => <article key={node.id} className="settings-card" style={{ padding: "1rem", margin: "1rem" }}><h2>{node.title}</h2><p>{node.notes}</p><small>{contacts.filter(contact => node.contact_ids.includes(contact.id)).map(contact => contact.name).join(", ")}</small></article>)}</section></div></main>;
+  const board = readKanban(draft?.kanban);
+  const viewSwitch = <div className="canvas-view-switch" role="group" aria-label="Canvas view">
+    <Button size="sm" variant={view === "freeform" ? "default" : "outline"} aria-pressed={view === "freeform"} onClick={() => changeView("freeform")}>Free-form</Button>
+    <Button size="sm" variant={view === "kanban" ? "default" : "outline"} aria-pressed={view === "kanban"} onClick={() => changeView("kanban")}>Kanban</Button>
+  </div>;
+  const kanbanView = draft && <CanvasKanban key={draft.id} value={board} nodes={draft.nodes} editable={can("canvases.manage")} disabled={saving}
+    onChange={kanban => updateDraft(canvas => ({ ...canvas, kanban }))} onOpen={id => { if (can("canvases.manage")) setEditingNodeId(id); }}
+    contactName={id => contactsById.get(id)?.name ?? "Unknown contact"} />;
+
+  if (!can("canvases.manage")) return <main className="canva-module"><div className="module-heading"><div><p className="eyebrow">Thinking spaces</p><h1 className="module-title">Canva</h1></div></div><div className="canva-layout"><aside className="canva-list"><header><strong>Canvases</strong><span>{canvases.length}</span></header>{canvases.map(canvas => <button key={canvas.id} className={activeId === canvas.id ? "active" : ""} onClick={() => chooseCanvas(canvas)}><LayoutDashboard /><span><strong>{canvas.title}</strong><small>{canvas.nodes.length} nodes</small></span></button>)}</aside><section className="canva-workspace">{viewSwitch}{view === "kanban" ? kanbanView : <div className="canva-stage-scroll"><div className="canva-stage" style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}>{draft?.nodes.map(node => <article key={node.id} className="canva-node" style={{ left: node.x, top: node.y, width: node.width ?? MIN_NODE_WIDTH, height: node.height ?? MIN_NODE_HEIGHT, padding: "1rem", overflow: "auto" }}><h2>{node.title}</h2><p>{node.notes}</p><small>{contacts.filter(contact => node.contact_ids.includes(contact.id)).map(contact => contact.name).join(", ")}</small></article>)}</div></div>}</section></div></main>;
   return <div className="canva-module">
-    <div className="module-heading"><div><p className="eyebrow">Thinking spaces</p><h1 className="module-title">Canva</h1><p className="module-subtitle">Create isolated canvases with movable nodes, notes, and contact references.</p></div><Button onClick={() => setCreateOpen(true)}><Plus />New canvas</Button></div>
+    <div className="module-heading"><div><p className="eyebrow">Thinking spaces</p><h1 className="module-title">Canva</h1><p className="module-subtitle">Create isolated canvases with movable nodes, notes, and contact references.</p></div><Button disabled={saving} onClick={() => setCreateOpen(true)}><Plus />New canvas</Button></div>
     <div className="canva-layout">
       <aside className="canva-list"><header><strong>Your canvases</strong><span>{canvases.length}</span></header>{loading ? <p>Loading…</p> : canvases.length ? canvases.map((canvas) => <button key={canvas.id} className={activeId === canvas.id ? "active" : ""} onClick={() => chooseCanvas(canvas)}><LayoutDashboard /><span><strong>{canvas.title}</strong><small>{canvas.nodes.length} node{canvas.nodes.length === 1 ? "" : "s"}</small></span></button>) : <div className="canva-list-empty"><LayoutDashboard /><span>No canvases yet.</span></div>}</aside>
       <section className="canva-workspace">
-        {draft ? <><div className="canva-toolbar"><Input value={draft.title} onChange={(event) => updateDraft((canvas) => ({ ...canvas, title: event.target.value }))} aria-label="Canvas title" /><div><span className={dirty ? "unsaved" : "saved"}>{dirty ? "Unsaved changes" : "Saved"}</span><div className="zoom-controls" aria-label="Canva zoom controls"><Button size="icon" variant="outline" onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))} disabled={zoom <= 0.5} aria-label="Zoom canvas out"><Minus /></Button><button className="zoom-level" onClick={() => setZoom(1)} aria-label="Reset canvas zoom to 100 percent">{Math.round(zoom * 100)}%</button><Button size="icon" variant="outline" onClick={() => setZoom((value) => Math.min(2, Number((value + 0.25).toFixed(2))))} disabled={zoom >= 2} aria-label="Zoom canvas in"><Plus /></Button><Button size="icon" variant="outline" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label="Reset canvas zoom"><Maximize2 /></Button></div><Button variant="outline" onClick={addNode}><Plus />Add node</Button><Button onClick={() => void saveCanvas()} disabled={!dirty || saving}><Save />{saving ? "Saving…" : "Save canvas"}</Button><Button variant="outline" className="canva-delete" onClick={() => void deleteCanvas()} disabled={saving}><Trash2 /></Button></div></div><div ref={stageScrollRef} className="canva-stage-scroll"><div className="canva-stage-viewport" style={{ width: STAGE_WIDTH * zoom, height: STAGE_HEIGHT * zoom }}><div className="canva-stage" style={{ transform: `scale(${zoom})` }}>{draft.nodes.map((node) => {
+        {draft ? <><div className="canva-toolbar">{viewSwitch}<Input disabled={saving} value={draft.title} onChange={(event) => updateDraft((canvas) => ({ ...canvas, title: event.target.value }))} aria-label="Canvas title" /><div><span className={dirty ? "unsaved" : "saved"}>{dirty ? "Unsaved changes" : "Saved"}</span>{view === "freeform" && <div className="zoom-controls" aria-label="Canva zoom controls"><Button size="icon" variant="outline" onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))} disabled={zoom <= 0.5} aria-label="Zoom canvas out"><Minus /></Button><button className="zoom-level" onClick={() => setZoom(1)} aria-label="Reset canvas zoom to 100 percent">{Math.round(zoom * 100)}%</button><Button size="icon" variant="outline" onClick={() => setZoom((value) => Math.min(2, Number((value + 0.25).toFixed(2))))} disabled={zoom >= 2} aria-label="Zoom canvas in"><Plus /></Button><Button size="icon" variant="outline" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label="Reset canvas zoom"><Maximize2 /></Button></div>}<Button disabled={saving} variant="outline" onClick={addNode}><Plus />Add node</Button><Button onClick={() => void saveCanvas()} disabled={!dirty || saving}><Save />{saving ? "Saving…" : "Save canvas"}</Button><Button variant="outline" className="canva-delete" onClick={() => void deleteCanvas()} disabled={saving}><Trash2 /></Button></div></div>{view === "kanban" ? kanbanView : <div ref={stageScrollRef} className="canva-stage-scroll"><div className="canva-stage-viewport" style={{ width: STAGE_WIDTH * zoom, height: STAGE_HEIGHT * zoom }}><div className="canva-stage" style={{ transform: `scale(${zoom})` }}>{draft.nodes.map((node) => {
           const linked = node.contact_ids.map((id) => contactsById.get(id)).filter((contact): contact is CanvasContact => Boolean(contact));
           return <article className="canva-node" key={node.id} style={{ left: node.x, top: node.y, width: node.width ?? MIN_NODE_WIDTH, height: node.height ?? MIN_NODE_HEIGHT }}>
             <button className="canva-node-handle" onPointerDown={(event) => beginDrag(event, node)} aria-label={`Move ${node.title}`}><Grip /></button>
@@ -220,7 +251,7 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
             </button>
             <button className="canva-node-resize" onPointerDown={(event) => beginResize(event, node)} aria-label={`Resize ${node.title}`} title="Drag to resize node"><Scaling /></button>
           </article>;
-        })}{draft.nodes.length === 0 && <div className="canva-stage-empty"><StickyNote /><strong>Start with a node</strong><span>Each node can hold notes and linked contacts.</span><Button onClick={addNode}><Plus />Add first node</Button></div>}</div></div></div></> : <div className="canva-empty"><LayoutDashboard /><h2>Choose or create a canvas</h2><p>Every canvas is a separate, deletable thinking space.</p><Button onClick={() => setCreateOpen(true)}><Plus />Create canvas</Button></div>}
+        })}{draft.nodes.length === 0 && <div className="canva-stage-empty"><StickyNote /><strong>Start with a node</strong><span>Each node can hold notes and linked contacts.</span><Button onClick={addNode}><Plus />Add first node</Button></div>}</div></div></div>}</> : <div className="canva-empty"><LayoutDashboard /><h2>Choose or create a canvas</h2><p>Every canvas is a separate, deletable thinking space.</p><Button onClick={() => setCreateOpen(true)}><Plus />Create canvas</Button></div>}
       </section>
     </div>
     <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent><DialogHeader><DialogTitle>Create a canvas</DialogTitle><DialogDescription>Name this isolated thinking space. You can rename it later.</DialogDescription></DialogHeader><Input autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void createCanvas(); }} placeholder="e.g. Washington data company" /><DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button><Button onClick={() => void createCanvas()} disabled={!newTitle.trim() || saving}>{saving ? "Creating…" : "Create canvas"}</Button></DialogFooter></DialogContent></Dialog>
@@ -228,6 +259,11 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
       <SheetContent className="w-full gap-0 overflow-hidden p-0 sm:max-w-xl">
         <SheetHeader className="border-b px-5 py-5 pr-14"><SheetTitle>Edit node</SheetTitle><SheetDescription>Notes and contacts remain inside this canvas.</SheetDescription></SheetHeader>
         {editingNode && <div className="canva-node-editor">
+          <label><span>Status</span><select aria-label="Node status" disabled={saving} value={board.assignments[editingNode.id] ?? ""} onChange={event => {
+            const assignments = { ...board.assignments, [editingNode.id]: event.target.value };
+            if (!event.target.value) delete assignments[editingNode.id];
+            updateDraft(canvas => ({ ...canvas, kanban: { ...board, assignments } }));
+          }}><option value="">Unassigned</option>{board.column_order.map(id => <option key={id} value={id}>{board.columns[id]}</option>)}</select></label>
           <label><span>Node title</span><Input value={editingNode.title} onChange={(event) => updateNode(editingNode.id, { title: event.target.value })} /></label>
           <div className="canva-size-fields">
             <label><span>Width (px)</span><Input key={`${editingNode.id}-width`} type="number" min={MIN_NODE_WIDTH} max={MAX_NODE_WIDTH} defaultValue={editingNode.width ?? MIN_NODE_WIDTH} onBlur={(event) => { event.currentTarget.value = String(changeSize(editingNode, "width", event.currentTarget.value)); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>

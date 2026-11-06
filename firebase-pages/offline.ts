@@ -18,14 +18,16 @@ function open(): Promise<IDBDatabase> {
 }
 async function operation<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const database = await open();
-  return new Promise((resolve, reject) => {
-    const tx = database.transaction(STORE, mode);
-    const request = run(tx.objectStore(STORE));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-    tx.onerror = () => reject(tx.error);
-    tx.oncomplete = () => database.close();
-  });
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = database.transaction(STORE, mode);
+      const request = run(tx.objectStore(STORE));
+      tx.oncomplete = () => resolve(request.result);
+      tx.onabort = () => reject(tx.error ?? new Error("Local storage transaction aborted."));
+    });
+  } finally {
+    database.close();
+  }
 }
 const keyFor = (collection: string, id: string, uid: string) => `${uid}:${collection}:${id}`;
 const currentUid = () => { if (!auth?.currentUser?.uid) throw new Error("Sign in before editing offline."); return auth.currentUser.uid; };
