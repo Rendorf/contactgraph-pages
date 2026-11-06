@@ -114,11 +114,41 @@ service cloud.firestore {
       allow update: if allowed('followups.manage') && validUpdate(id);
       allow delete: if allowed('followups.manage');
     }
+    function validColumn(board, index) {
+      return index >= board.column_order.size() || (
+        board.column_order[index] is string
+        && board.column_order[index].size() > 0 && board.column_order[index].size() <= 100
+        && !(board.column_order[index] in ['__proto__', 'constructor', 'prototype'])
+        && board.columns[board.column_order[index]] is string
+        && board.columns[board.column_order[index]].size() > 0
+        && board.columns[board.column_order[index]].size() <= 80);
+    }
+    function validKanban(board) {
+      return board is map && (board.size() == 0 || (
+        board.keys().hasOnly(['columns', 'column_order', 'assignments', 'card_order'])
+        && board.keys().hasAll(['columns', 'column_order', 'assignments', 'card_order'])
+        && board.columns is map && board.columns.size() <= 20
+        && board.column_order is list && board.column_order.size() == board.columns.size()
+        && board.column_order.toSet().size() == board.column_order.size()
+        && board.column_order.toSet() == board.columns.keys().toSet()
+        && board.assignments is map && board.assignments.size() <= 500
+        && board.assignments.values().hasOnly(board.columns.keys())
+        && board.card_order is list && board.card_order.size() <= 500
+        && board.card_order.toSet().size() == board.card_order.size()
+        && validColumn(board, 0) && validColumn(board, 1) && validColumn(board, 2) && validColumn(board, 3) && validColumn(board, 4) && validColumn(board, 5) && validColumn(board, 6) && validColumn(board, 7) && validColumn(board, 8) && validColumn(board, 9) && validColumn(board, 10) && validColumn(board, 11) && validColumn(board, 12) && validColumn(board, 13) && validColumn(board, 14) && validColumn(board, 15) && validColumn(board, 16) && validColumn(board, 17) && validColumn(board, 18) && validColumn(board, 19)
+      ));
+    }
+    function validCanvas() {
+      return request.resource.data.title is string
+        && request.resource.data.nodes is list && request.resource.data.nodes.size() <= 500
+        && (!('kanban' in request.resource.data) || validKanban(request.resource.data.kanban));
+    }
     match /canvases/{id} {
       allow read: if allowed('canvases.view');
       allow create: if allowed('canvases.manage') && validRecord(id) && request.resource.data.revision == 1
-        && request.resource.data.title is string && request.resource.data.nodes is list;
-      allow update: if allowed('canvases.manage') && validUpdate(id);
+        && validCanvas();
+      allow update: if allowed('canvases.manage') && validUpdate(id) && validCanvas()
+        && (!('kanban' in resource.data) || 'kanban' in request.resource.data);
       allow delete: if allowed('canvases.manage');
     }
     match /holidays/{id} {

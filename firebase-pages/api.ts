@@ -1,3 +1,4 @@
+import { validateKanban } from "../app/canvas-kanban";
 import { doc, getDoc, collection, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
 import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
 import permissionModules from "./permission-catalog.json";
@@ -414,7 +415,7 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
     const canvas = /^\/api\/canvases\/([^/]+)$/.exec(path);
     if (canvas) {
       if (method === "DELETE") { await remove("canvases", canvas[1]); return response({ deleted: true }); }
-      if (method === "PUT") { const item = parse(options) as Item; if (item.id !== canvas[1] || !Array.isArray(item.nodes) || item.nodes.length > 300) throw new Error("Invalid canvas."); return response({ canvas: await put("canvases", item, false) }); }
+      if (method === "PUT") { const item = parse(options) as Item; if (item.id !== canvas[1] || !Array.isArray(item.nodes) || item.nodes.length > 300) throw new Error("Invalid canvas."); validateKanban(item.kanban ?? {}, item.nodes.map((node: Json) => node.id)); return response({ canvas: await put("canvases", item, false) }); }
     }
     if (path === "/api/holidays" && method === "GET") return response({ holidays: await readRows("holidays") });
     if (path === "/api/holiday-messages" && method === "GET") {

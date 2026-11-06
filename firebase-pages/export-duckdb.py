@@ -19,6 +19,10 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 ROOT = APP_ROOT.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from contactdb import list_canvases, list_contacts, list_holiday_messages, list_holidays, list_meetings  # noqa: E402
+import contactdb  # noqa: E402
+
+if not hasattr(contactdb, "validate_canvas_kanban"):
+    raise RuntimeError("Update the ContactGraph server code before exporting or synchronizing Kanban boards.")
 
 
 OSINT_TABLES = ("settings", "monitors", "feeds", "items", "runs", "candidates", "provider_findings")

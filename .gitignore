@@ -70,6 +70,7 @@ next-env.d.ts
 !/app/contact-graph.tsx
 !/app/holiday-module.tsx
 !/app/canva-module.tsx
+!/app/canvas-kanban.tsx
 !/app/accounts-module.tsx
 !/app/contact-message-history.tsx
 !/app/contact-osint-history.tsx
