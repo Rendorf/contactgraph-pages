@@ -1017,3 +1017,11 @@ button.small-tag:hover { background:#dff0ef; color:#0b626d; }
 .kanban-card-actions select { flex: 1; min-width: 0; max-width: 170px; }
 .kanban-card-actions select, .canva-node-editor select { border: 1px solid #dce3e9; border-radius: 6px; padding: .4rem; background: white; }
 .kanban-empty { padding: 1rem .4rem; color: #586979; font-size: .875rem; }
+
+.kanban-order-hint { color: #586979; font-size: .875rem; margin-bottom: .75rem; }
+.kanban-column > header strong { flex: 1; }
+.kanban-column-drag-handle { cursor: grab; color: #586979; padding: .2rem; border-radius: 4px; }
+.kanban-column-drag-handle:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.kanban-column-drag-handle:active { cursor: grabbing; }
+.kanban-column.is-dragging-column { opacity: .55; }
+.kanban-column.is-column-drop-target { outline: 2px solid #2563eb; outline-offset: -2px; }

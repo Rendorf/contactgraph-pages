@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -39,6 +40,13 @@ export function moveKanbanCard(value: Kanban, nodeIds: string[], id: string, sta
   return { ...value, assignments, card_order };
 }
 
+export function moveKanbanColumn(value: Kanban, id: string, target: string, after = false): Kanban {
+  if (id === target || !value.column_order.includes(id) || !value.column_order.includes(target)) return value;
+  const column_order = value.column_order.filter(key => key !== id);
+  column_order.splice(column_order.indexOf(target) + (after ? 1 : 0), 0, id);
+  return { ...value, column_order };
+}
+
 type Card = { id: string; title: string; notes: string; contact_ids: string[] };
 type Props = {
   value: Kanban;
@@ -53,6 +61,9 @@ type Props = {
 export function CanvasKanban({ value, nodes, editable, disabled, onChange, onOpen, contactName }: Props) {
   const [newColumn, setNewColumn] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);
+  const [draggingColumn, setDraggingColumn] = useState<string | null>(null);
+  const [columnDropTarget, setColumnDropTarget] = useState<string | null>(null);
+  const clearColumnDrag = () => { setDraggingColumn(null); setColumnDropTarget(null); };
   const [renaming, setRenaming] = useState<string | null>(null);
   const [columnTitle, setColumnTitle] = useState("");
   const canEdit = editable && !disabled;
@@ -77,11 +88,9 @@ export function CanvasKanban({ value, nodes, editable, disabled, onChange, onOpe
     onChange({ ...value, columns, column_order: value.column_order.filter(key => key !== id), assignments: Object.fromEntries(Object.entries(value.assignments).filter(([, status]) => status !== id)) });
   };
   const moveColumn = (index: number, offset: number) => {
-    const column_order = [...value.column_order];
     const target = index + offset;
-    if (!canEdit || target < 0 || target >= column_order.length) return;
-    [column_order[index], column_order[target]] = [column_order[target], column_order[index]];
-    onChange({ ...value, column_order });
+    if (!canEdit || target < 0 || target >= value.column_order.length) return;
+    onChange(moveKanbanColumn(value, value.column_order[index], value.column_order[target], offset > 0));
   };
   return <div className="canvas-kanban">
     {editable && <form className="kanban-add-column" onSubmit={event => { event.preventDefault(); addColumn(); }}>
@@ -89,15 +98,39 @@ export function CanvasKanban({ value, nodes, editable, disabled, onChange, onOpe
       <Button type="submit" disabled={!canEdit || !newColumn.trim() || value.column_order.length >= 20}>Add column</Button>
       <small>{value.column_order.length}/20 columns</small>
     </form>}
+    {editable && <p className="kanban-order-hint">Drag column handles to change their order, or use the left and right arrows. Save canvas to keep your changes.</p>}
     <div className="kanban-columns">
       {["", ...value.column_order].map(status => {
         const cards = orderedNodes.filter(node => statusOf(node.id) === status);
         const title = status ? value.columns[status] : "Unassigned";
         const columnIndex = value.column_order.indexOf(status);
-        return <section className="kanban-column" key={status} aria-label={`${title} column`}
-          onDragOver={event => { if (canEdit && dragging) event.preventDefault(); }}
-          onDrop={event => { event.preventDefault(); if (dragging) moveCard(dragging, status); setDragging(null); }}>
-          <header><strong>{title}</strong><span>{cards.length}</span></header>
+        return <section className={`kanban-column${draggingColumn === status ? " is-dragging-column" : ""}${columnDropTarget === status ? " is-column-drop-target" : ""}`} key={status} aria-label={`${title} column`}
+          onDragOver={event => {
+            if (!canEdit) return;
+            if (draggingColumn && status && status !== draggingColumn) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              setColumnDropTarget(status);
+            } else if (dragging) event.preventDefault();
+          }}
+          onDrop={event => {
+            event.preventDefault();
+            if (canEdit && draggingColumn && status) {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              onChange(moveKanbanColumn(value, draggingColumn, status, event.clientX >= bounds.left + bounds.width / 2));
+            } else if (dragging) moveCard(dragging, status);
+            setDragging(null);
+            clearColumnDrag();
+          }}>
+          <header>{status && editable && <button type="button" className="kanban-column-drag-handle" draggable={canEdit} disabled={!canEdit}
+            aria-label={`Drag ${title} column to reorder`} title="Drag to reorder column"
+            onDragStart={event => {
+              event.stopPropagation();
+              setDragging(null);
+              setDraggingColumn(status);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", status);
+            }} onDragEnd={clearColumnDrag}><GripVertical size={18} /></button>}<strong>{title}</strong><span>{cards.length}</span></header>
           {status && editable && <div className="kanban-column-actions">
             <Button size="sm" variant="ghost" disabled={!canEdit || columnIndex === 0} onClick={() => moveColumn(columnIndex, -1)} aria-label={`Move ${title} column left`}>←</Button>
             <Button size="sm" variant="ghost" disabled={!canEdit || columnIndex === value.column_order.length - 1} onClick={() => moveColumn(columnIndex, 1)} aria-label={`Move ${title} column right`}>→</Button>
@@ -111,7 +144,7 @@ export function CanvasKanban({ value, nodes, editable, disabled, onChange, onOpe
           {cards.map((node, index) => <article className="kanban-card" key={node.id} draggable={canEdit}
             onDragStart={event => { setDragging(node.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", node.id); }} onDragEnd={() => setDragging(null)}
             onDragOver={event => { if (canEdit && dragging) event.preventDefault(); }}
-            onDrop={event => { event.preventDefault(); event.stopPropagation(); if (dragging) moveCard(dragging, status, node.id); setDragging(null); }}>
+            onDrop={event => { if (draggingColumn) return; event.preventDefault(); event.stopPropagation(); if (dragging) moveCard(dragging, status, node.id); setDragging(null); }}>
             <button className="kanban-card-content" onClick={() => onOpen(node.id)}><strong>{node.title}</strong><p>{node.notes || "No notes"}</p><small>{node.contact_ids.map(contactName).join(", ") || "No contacts"}</small></button>
             {editable && <div className="kanban-card-actions">
               <select aria-label={`Status for ${node.title}`} value={status} disabled={!canEdit} onChange={event => moveCard(node.id, event.target.value)}><option value="">Unassigned</option>{value.column_order.map(id => <option key={id} value={id}>{value.columns[id]}</option>)}</select>
