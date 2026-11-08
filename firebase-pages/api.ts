@@ -4,6 +4,7 @@ import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
 import permissionModules from "./permission-catalog.json";
 import { overlay, queueDelete, queuePut, syncPending } from "./offline";
 import { isFirestoreQuotaExceeded } from "./quota.mjs";
+import { hermesRequest } from "./hermes-api";
 
 type Json = Record<string, any>;
 type Item = Json & { id: string; revision?: number };
@@ -19,6 +20,15 @@ const errorResponse = (error: unknown) => isFirestoreQuotaExceeded(error)
 const cleanId = (value: string) => {
   if (!value || value.length > 200 || value.includes("/") || value === "." || value === "..") throw new Error("Invalid record ID.");
   return value;
+};
+const nextMessageSequence = () => {
+  const values = crypto.getRandomValues(new Uint32Array(2));
+  return (values[0] & 0x1fffff) * 0x100000000 + values[1];
+};
+const saveGeneratedMessage = async (message: Json) => {
+  const sequence = nextMessageSequence();
+  const created_at = new Date().toISOString();
+  return put("holiday_messages", { ...message, id: String(sequence), sequence, created_at }, true);
 };
 const parse = (options?: RequestInit): Json => {
   const body = JSON.parse(String(options?.body ?? "{}"));
@@ -427,7 +437,29 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
       if (method === "DELETE") { await remove("holiday_messages", message[1]); return response({ deleted: true }); }
       if (method === "PUT") { const prior = await readOne("holiday_messages", message[1]); if (!prior) throw new Error("Message no longer exists."); const body = parse(options); const updated = await put("holiday_messages", { ...prior, ...body, id: prior.id, ...(body.status ? { sent_at: body.status === "sent" ? new Date().toISOString() : null } : {}) }, false); return response(updated); }
     }
-    if (path === "/api/ai-availability") return response({ configured: false, model: "" });
+    if (path === "/api/ai-availability" && method === "GET") {
+      try { return response(await hermesRequest("availability")); }
+      catch { return response({ configured: false, model: "" }); }
+    }
+    if (path === "/api/settings" && method === "GET") return response(await hermesRequest("settings"));
+    if (path === "/api/settings/openai" && method === "PUT") return response(await hermesRequest("key", { method, body: options?.body }));
+    if (path === "/api/settings/openai" && method === "DELETE") return response(await hermesRequest("key", { method }));
+    if (path === "/api/settings/openai-model" && method === "PUT") return response(await hermesRequest("model", { method, body: options?.body }));
+    if (path === "/api/birthdays/generate-message" && method === "POST") {
+      const generated = await hermesRequest("birthday", { method, body: options?.body }) as { message: Json };
+      return response({ message: await saveGeneratedMessage(generated.message) });
+    }
+    if (path === "/api/holidays/generate-messages" && method === "POST") {
+      const generated = await hermesRequest("holiday", { method, body: options?.body }) as { messages: Json[] };
+      const messages = [];
+      for (const message of generated.messages) messages.push(await saveGeneratedMessage(message));
+      return response({ messages });
+    }
+    if (path === "/api/holidays/regenerate-message" && method === "POST") {
+      const body = parse(options);
+      const generated = await hermesRequest("holiday", { method, body: JSON.stringify({ holiday_id: body.holiday_id, language: body.language, guidance: body.guidance, contact_ids: [body.contact_id] }) }) as { messages: Json[] };
+      return response({ message: await saveGeneratedMessage(generated.messages[0]) });
+    }
     if (path === "/api/followups" && method === "GET") return response(await followupsView());
     if (path === "/api/followups" && method === "POST") {
       const body = parse(options);

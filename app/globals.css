@@ -43,6 +43,7 @@ button { cursor:pointer; }
 .admin-navigation button.active,.mobile-navigation button.active { background:#d8f0ed; color:#0d5c65; }
 .admin-navigation svg,.mobile-navigation svg { width:1.05rem; height:1.05rem; }
 .admin-navigation small,.mobile-navigation small { font-size:.66rem; font-weight:700; opacity:.72; }
+.admin-navigation small[aria-label],.mobile-navigation small[aria-label] { display:inline-flex; align-items:center; justify-content:center; min-width:1.3rem; min-height:1.3rem; padding:0 .28rem; border-radius:999px; background:#f7bc53; color:#392713; opacity:1; }
 .sidebar-status { display:flex; align-items:flex-start; gap:.6rem; margin-top:auto; border:1px solid #2b4a59; border-radius:.8rem; padding:.75rem; background:#1b3745; }
 .status-dot { width:.48rem; height:.48rem; flex:none; margin-top:.27rem; border-radius:50%; background:#54c796; box-shadow:0 0 0 3px rgb(84 199 150 / 12%); }
 .sidebar-status strong,.sidebar-status span { display:block; }

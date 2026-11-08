@@ -95,6 +95,7 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
       setEditingCadence("");
       toast.success(success);
       try { await load(); } catch { toast.warning("Saved, but the follow-up list could not refresh yet."); }
+      window.dispatchEvent(new Event("contactgraph:followups-changed"));
       return true;
     } catch (error) { toast.error(error instanceof Error ? error.message : "Follow-up could not be saved."); return false; }
     finally { setBusy(false); }

@@ -83,6 +83,27 @@ const birthdayMonthDay = (birthday: unknown) => {
   const value = String(birthday ?? "");
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.slice(5) : /^--\d{2}-\d{2}$/.test(value) ? value.slice(2) : null;
 };
+const todayInBaku = () => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baku", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+type DatedHoliday = { start_date: string; end_date: string; recurrence?: string[] };
+const currentHolidayCount = (holidays: DatedHoliday[], today: string) => {
+  const day = Date.parse(`${today}T00:00:00Z`);
+  const year = Number(today.slice(0, 4));
+  return holidays.filter((holiday) => {
+    const originalStart = Date.parse(`${holiday.start_date}T00:00:00Z`);
+    const originalEnd = Date.parse(`${holiday.end_date}T00:00:00Z`);
+    if (!Number.isFinite(originalStart) || !Number.isFinite(originalEnd)) return false;
+    const duration = Math.max(1, Math.round((originalEnd - originalStart) / 86_400_000));
+    if (!holiday.recurrence?.some((rule) => rule.includes("FREQ=YEARLY"))) return day >= originalStart && day < originalStart + duration * 86_400_000;
+    const start = new Date(originalStart);
+    return [year - 1, year].some((occurrenceYear) => {
+      const occurrence = Date.UTC(occurrenceYear, start.getUTCMonth(), start.getUTCDate());
+      return day >= occurrence && day < occurrence + duration * 86_400_000;
+    });
+  }).length;
+};
 const validBirthday = (birthday: string) => {
   if (!birthday) return true;
   const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday);
@@ -491,10 +512,12 @@ function ContactAttributeFilters({ positions, organizations, selectedPositions, 
   </div>;
 }
 
-function Navigation({ activeModule, contactCount, birthdayCount, osintAvailable, mobile = false, onSelect }: {
+function Navigation({ activeModule, contactCount, birthdayCount, holidayCount, followupCount, osintAvailable, mobile = false, onSelect }: {
   activeModule: Module;
   contactCount: number;
   birthdayCount: number;
+  holidayCount: number;
+  followupCount: number;
   osintAvailable: boolean;
   mobile?: boolean;
   onSelect: (module: Module) => void;
@@ -503,11 +526,11 @@ function Navigation({ activeModule, contactCount, birthdayCount, osintAvailable,
   return <nav className={mobile ? "mobile-navigation" : "admin-navigation"} aria-label="Main navigation">
     <button className={activeModule === "contacts" ? "active" : ""} onClick={() => onSelect("contacts")}><ContactRound /><span>Contacts</span><small>{contactCount.toLocaleString()}</small></button>
     {can("graph.view") && <button className={activeModule === "graph" ? "active" : ""} onClick={() => onSelect("graph")}><Network /><span>Graph view</span></button>}
-    {!offline && can("holidays.view") && <button className={activeModule === "holidays" ? "active" : ""} onClick={() => onSelect("holidays")}><CalendarDays /><span>Holidays</span></button>}
-    {!offline && can("drafts.view") && <button className={activeModule === "notifications" ? "active" : ""} onClick={() => onSelect("notifications")}><Bell /><span>Notifications</span>{birthdayCount > 0 && <small>{birthdayCount}</small>}</button>}
+    {!offline && can("holidays.view") && <button className={activeModule === "holidays" ? "active" : ""} onClick={() => onSelect("holidays")}><CalendarDays /><span>Holidays</span>{holidayCount > 0 && <small aria-label={`${holidayCount} holidays today`}>{holidayCount}</small>}</button>}
+    {!offline && can("drafts.view") && <button className={activeModule === "notifications" ? "active" : ""} onClick={() => onSelect("notifications")}><Bell /><span>Notifications</span>{birthdayCount + holidayCount > 0 && <small aria-label={`${birthdayCount} birthdays and ${holidayCount} holidays today`}>{birthdayCount + holidayCount}</small>}</button>}
     {can("duplicates.view") && <button className={activeModule === "duplicates" ? "active" : ""} onClick={() => onSelect("duplicates")}><Copy /><span>Duplication and sync errors</span></button>}
     {can("meetings.view") && <button className={activeModule === "meetings" ? "active" : ""} onClick={() => onSelect("meetings")}><CalendarDays /><span>Meetings</span></button>}
-    {can("followups.view") && <button className={activeModule === "followups" ? "active" : ""} onClick={() => onSelect("followups")}><LayoutDashboard /><span>Follow-ups</span></button>}
+    {can("followups.view") && <button className={activeModule === "followups" ? "active" : ""} onClick={() => onSelect("followups")}><LayoutDashboard /><span>Follow-ups</span>{followupCount > 0 && <small aria-label={`${followupCount} follow-ups due or overdue`}>{followupCount}</small>}</button>}
     {!offline && can("canvases.view") && <button className={activeModule === "canva" ? "active" : ""} onClick={() => onSelect("canva")}><LayoutDashboard /><span>Canva</span></button>}
     {!offline && osintAvailable && can("osint.view") && <button className={activeModule === "osint" ? "active" : ""} onClick={() => onSelect("osint")}><Radar /><span>OSINT updates</span></button>}
     <button className={["settings", "accounts", "account"].includes(activeModule) ? "active" : ""} onClick={() => onSelect(can("settings.manage") ? "settings" : can("users.manage") ? "accounts" : "account")}><Settings2 /><span>Settings</span></button>
@@ -580,9 +603,41 @@ export default function Home() {
   const [mergeSelection, setMergeSelection] = useState<Contact[] | null>(null);
   const [mergeFromDetails, setMergeFromDetails] = useState(false);
   const [tagMergeOpen, setTagMergeOpen] = useState(false);
-  const bakuTodayParts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baku", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map((part) => [part.type, part.value]));
-  const bakuToday = `${bakuTodayParts.year}-${bakuTodayParts.month}-${bakuTodayParts.day}`;
+  const [bakuToday, setBakuToday] = useState(todayInBaku);
+  const [holidayCount, setHolidayCount] = useState(0);
+  const [followupCount, setFollowupCount] = useState(0);
+  const canViewHolidays = can("holidays.view");
+  const canViewFollowups = can("followups.view");
   const todaysBirthdayCount = contacts.filter((contact) => birthdayMonthDay(contact.birthday) === bakuToday.slice(5)).length;
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      const today = todayInBaku();
+      setBakuToday(today);
+      if (!offline && canViewHolidays) void fetch("/api/holidays", { cache: "no-store" })
+        .then(async (response) => { if (!response.ok) throw new Error("Holidays unavailable"); return response.json() as Promise<{ holidays: DatedHoliday[] }>; })
+        .then((body) => { if (active && Array.isArray(body.holidays)) setHolidayCount(currentHolidayCount(body.holidays, today)); })
+        .catch(() => undefined);
+      else setHolidayCount(0);
+      if (canViewFollowups) void fetch("/api/followups", { cache: "no-store" })
+        .then(async (response) => { if (!response.ok) throw new Error("Follow-ups unavailable"); return response.json() as Promise<{ actions: { due_date: string }[]; suggestions: { due_date: string }[] }>; })
+        .then((body) => { if (active && Array.isArray(body.actions) && Array.isArray(body.suggestions)) setFollowupCount([...body.actions, ...body.suggestions].filter((item) => item.due_date <= today).length); })
+        .catch(() => undefined);
+      else setFollowupCount(0);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    for (const name of ["holidays", "followup_actions", "followup_settings", "meetings", "contacts"]) window.addEventListener(`contactgraph:collection:${name}`, refresh);
+    window.addEventListener("contactgraph:sync", refresh);
+    window.addEventListener("contactgraph:followups-changed", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      for (const name of ["holidays", "followup_actions", "followup_settings", "meetings", "contacts"]) window.removeEventListener(`contactgraph:collection:${name}`, refresh);
+      window.removeEventListener("contactgraph:sync", refresh);
+      window.removeEventListener("contactgraph:followups-changed", refresh);
+    };
+  }, [canViewHolidays, canViewFollowups, offline, activeModule]);
 
   useEffect(() => {
     let active = true;
@@ -856,7 +911,7 @@ export default function Home() {
     <aside className="admin-sidebar">
       <div className="admin-brand"><div className="brand-mark"><UserRound /></div><div><strong>ContactGraph</strong><span>Network admin</span></div></div>
       <p className="navigation-label">Workspace</p>
-      <Navigation activeModule={visibleModule} contactCount={contacts.length} birthdayCount={todaysBirthdayCount} osintAvailable={osintAvailable} onSelect={selectModule} />
+      <Navigation activeModule={visibleModule} contactCount={contacts.length} birthdayCount={todaysBirthdayCount} holidayCount={holidayCount} followupCount={followupCount} osintAvailable={osintAvailable} onSelect={selectModule} />
       <div className="sidebar-status"><span className="status-dot" /><div><strong>{import.meta.env.MODE === "firebase-pages" ? "Shared database" : "Local database"}</strong><span>{contacts.length.toLocaleString()} records · {import.meta.env.MODE === "firebase-pages" ? "Firestore" : "DuckDB"}</span></div></div>
     </aside>
 
@@ -902,7 +957,7 @@ export default function Home() {
       </div> : visibleModule === "graph" ? <ContactGraph contacts={contacts} onSelectContact={openContactById} /> : visibleModule === "holidays" ? <HolidayModule contacts={contacts} onOpenSettings={() => setActiveModule(can("settings.manage") ? "settings" : "account")} openHolidayId={notificationHolidayId} onHolidayOpened={() => setNotificationHolidayId(null)} /> : visibleModule === "notifications" ? <NotificationsModule contacts={contacts} onOpenContact={openContactById} onOpenSettings={() => setActiveModule(can("settings.manage") ? "settings" : "account")} onOpenHoliday={(holidayId) => { setNotificationHolidayId(holidayId); setActiveModule("holidays"); }} /> : visibleModule === "duplicates" ? <DuplicatesModule contacts={contacts} onOpenContact={openContactById} onMerge={mergeDuplicatePair} onDelete={deleteDuplicateContacts} /> : visibleModule === "meetings" ? <MeetingsModule contacts={contacts} /> : visibleModule === "followups" ? <FollowupsModule contacts={contacts} onOpenContact={openContactById} /> : visibleModule === "canva" ? <CanvaModule contacts={contacts} /> : visibleModule === "osint" ? <OsintModule contacts={contacts} onContactUpdated={(contact) => setContacts(current => current.map(item => item.id === contact.id ? contact as Contact : item))} /> : <SettingsArea section={visibleModule as SettingsSection} onSelect={setActiveModule} />}
     </div>
 
-    <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} birthdayCount={todaysBirthdayCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>
+    <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} birthdayCount={todaysBirthdayCount} holidayCount={holidayCount} followupCount={followupCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>
     <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] overflow-y-auto border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Select one or more positions, organizations and tags.</SheetDescription></SheetHeader><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
     {visibleModule === "contacts" && <Button className="mobile-filter-button" onClick={() => setFiltersOpen(true)}><Tag />Filters{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Button>}
     <AlertDialog open={bulkAction !== null} onOpenChange={(open) => { if (!open && !bulkSaving) setBulkAction(null); }}>
