@@ -564,6 +564,7 @@ export default function Home() {
   const [notificationHolidayId, setNotificationHolidayId] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
@@ -644,19 +645,24 @@ export default function Home() {
     fetch("/api/contacts/overrides")
       .then(async (response) => {
         if (!response.ok) throw new Error("Database unavailable");
-        return response.json() as Promise<{ contacts: Contact[] }>;
+        const body = await response.json() as { contacts?: unknown };
+        if (!Array.isArray(body.contacts)) throw new Error("Invalid contacts response");
+        return body.contacts as Contact[];
       })
-      .then((body) => { if (active) { setContacts(body.contacts); setLoading(false); } })
+      .then((items) => { if (active) { setContacts(items); setLoadError(""); setLoading(false); } })
       .catch(async () => {
         if (import.meta.env.MODE === "firebase-pages") {
-          if (active) { setLoading(false); toast.error("Contacts could not be loaded from Firebase"); }
+          if (active) { setLoadError("Contacts could not be loaded from Firebase."); setLoading(false); toast.error("Contacts could not be loaded from Firebase"); }
           return;
         }
         try {
-          const fallback = await fetch("/contacts.json").then((response) => response.json()) as Contact[];
-          if (active) { setContacts(fallback); setLoading(false); toast.warning("Showing the latest generated export; database editing may be unavailable."); }
+          const response = await fetch("/contacts.json", { cache: "no-store" });
+          if (!response.ok) throw new Error("Contact export unavailable");
+          const fallback = await response.json() as unknown;
+          if (!Array.isArray(fallback)) throw new Error("Invalid contact export");
+          if (active) { setContacts(fallback as Contact[]); setLoadError(""); setLoading(false); toast.warning("Showing the latest generated export; database editing may be unavailable."); }
         } catch {
-          if (active) { setLoading(false); toast.error("Contacts could not be loaded"); }
+          if (active) { setLoadError("Contacts could not be loaded. Refresh to try again."); setLoading(false); toast.error("Contacts could not be loaded"); }
         }
       });
     return () => { active = false; };
@@ -942,6 +948,7 @@ export default function Home() {
             </div>
           </div>}
           {loading ? <div className="contact-grid">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-40 animate-pulse rounded-2xl border border-[#d8e3e8] bg-white/70" />)}</div>
+          : loadError ? <div className="empty-state" role="alert"><h2>Contacts unavailable</h2><p>{loadError}</p><Button variant="outline" onClick={() => window.location.reload()}>Refresh</Button></div>
           : filteredContacts.length === 0 ? <div className="empty-state"><Search /><h2>No contacts found</h2><p>{selectedLetter ? `No matching names start with ${selectedLetter}. Choose another letter or All.` : "Try another search or clear a filter."}</p></div>
           : <><div className="contact-grid">{filteredContacts.slice(0, visibleCount).map((contact, index) => { const selected = selectedIds.has(contact.id); return <article key={contact.id} className={`contact-card ${selected ? "selected" : ""}`}>
             {selectionMode && <label className="contact-selector"><input type="checkbox" checked={selected} onChange={() => toggleContactSelection(contact.id)} aria-label={`Select ${contact.name}`} /><span><Check /></span></label>}
