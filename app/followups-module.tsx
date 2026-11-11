@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch, searchRank } from "./search";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Check, ChevronDown, Clock3, Plus, X } from "lucide-react";
@@ -101,7 +102,7 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
     finally { setBusy(false); }
   };
   const matches = useMemo(() => contactQuery.trim().length > 1
-    ? contacts.filter((contact) => `${contact.name} ${contact.organization || ""}`.toLocaleLowerCase().includes(contactQuery.toLocaleLowerCase())).slice(0, 8)
+    ? contacts.filter((contact) => normalizeSearch(`${contact.name} ${contact.organization || ""}`).includes(normalizeSearch(contactQuery))).sort((a, b) => searchRank(a.name, contactQuery) - searchRank(b.name, contactQuery)).slice(0, 8)
     : [], [contacts, contactQuery]);
   const entries = useMemo(() => {
     if (!data) return [];

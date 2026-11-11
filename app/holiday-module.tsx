@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch, searchRank } from "./search";
 
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, Copy, History, KeyRound, Languages, Mail, Phone, RefreshCw, Save, Search, Send, Sparkles, Trash2, Undo2, UsersRound, X } from "lucide-react";
@@ -105,12 +106,12 @@ function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigu
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [contacts]);
   const filteredContacts = useMemo(() => {
-    const needle = recipientQuery.trim().toLocaleLowerCase();
+    const needle = normalizeSearch(recipientQuery);
     return contacts.filter((contact) => {
       const matchesTag = !recipientTag || (contact.labels ?? []).includes(recipientTag);
-      const searchable = [contact.name, contact.organization, contact.role, ...(contact.labels ?? []), ...(contact.emails ?? []).map((item) => item.address), ...(contact.phones ?? []).map((item) => item.number)].join(" ").toLocaleLowerCase();
+      const searchable = normalizeSearch([contact.name, contact.organization, contact.role, ...(contact.labels ?? []), ...(contact.emails ?? []).map((item) => item.address), ...(contact.phones ?? []).map((item) => item.number)].join(" "));
       return matchesTag && (!needle || searchable.includes(needle));
-    });
+    }).sort((a, b) => searchRank(a.name, recipientQuery) - searchRank(b.name, recipientQuery));
   }, [contacts, recipientQuery, recipientTag]);
   useEffect(() => { setIncludeNotes(false); }, [open, holiday?.id]);
   const selectedContacts = useMemo(() => contacts.filter((contact) => selectedIds.has(contact.id)), [contacts, selectedIds]);
@@ -253,9 +254,9 @@ function MessageHistory({ open, onOpenChange, contacts, serverConfigured }: {
   }, [open]);
 
   const filteredMessages = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
+    const needle = normalizeSearch(query);
     if (!needle) return messages;
-    return messages.filter((message) => `${message.contact_name ?? ""} ${message.holiday_title ?? ""} ${message.language} ${message.content}`.toLocaleLowerCase().includes(needle));
+    return messages.filter((message) => normalizeSearch(`${message.contact_name ?? ""} ${message.holiday_title ?? ""} ${message.language} ${message.content}`).includes(needle));
   }, [messages, query]);
   const editMessage = (message: GeneratedMessage, content: string) => {
     setMessages((current) => current.map((item) => item.sequence === message.sequence ? { ...item, content } : item));
@@ -392,9 +393,9 @@ export function HolidayModule({ contacts, onOpenSettings, openHolidayId, onHolid
   const selectedDayHolidays = useMemo(() => holidays.filter((holiday) => occursOn(holiday, selectedDate)), [holidays, selectedDate]);
   const orderedHolidays = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const needle = holidayQuery.trim().toLocaleLowerCase();
+    const needle = normalizeSearch(holidayQuery);
     const rows = holidays
-      .filter((holiday) => !needle || `${holiday.title} ${holiday.categories.join(" ")}`.toLocaleLowerCase().includes(needle))
+      .filter((holiday) => !needle || normalizeSearch(`${holiday.title} ${holiday.categories.join(" ")}`).includes(needle))
       .map((holiday) => nextOccurrence(holiday, today));
     return {
       upcoming: rows.filter((row) => !row.past).sort((a, b) => a.date.getTime() - b.date.getTime() || a.holiday.title.localeCompare(b.holiday.title)),

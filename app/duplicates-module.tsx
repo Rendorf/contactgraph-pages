@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch } from "./search";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, Copy, GitMerge, Mail, Phone, Search, Trash2, UsersRound } from "lucide-react";
@@ -106,8 +107,8 @@ export function DuplicatesModule({ contacts, onOpenContact, onMerge, onDelete }:
   };
   const pairs = useMemo(() => findDuplicatePairs(contacts), [contacts]);
   const shownPairs = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    return pairs.filter(({ first, second, reasons }) => !needle || `${first.name} ${first.organization ?? ""} ${second.name} ${second.organization ?? ""} ${[...reasons].join(" ")}`.toLocaleLowerCase().includes(needle));
+    const needle = normalizeSearch(query);
+    return pairs.filter(({ first, second, reasons }) => !needle || normalizeSearch(`${first.name} ${first.organization ?? ""} ${second.name} ${second.organization ?? ""} ${[...reasons].join(" ")}`).includes(needle));
   }, [pairs, query]);
   const confirmDelete = async () => {
     if (!deleteTargets.length || !deletePair) return;

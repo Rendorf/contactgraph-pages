@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch, searchRank } from "./search";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronDown, ExternalLink, Play, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
@@ -168,7 +169,7 @@ export function OsintModule({ contacts, onContactUpdated }: { contacts: Contact[
   const selected = contacts.find(contact => contact.id === contactId);
   const monitor = snapshot?.monitors.find(item => item.contact_id === contactId);
   const feeds = snapshot?.feeds.filter(item => item.contact_id === contactId) ?? [];
-  const filteredContacts = useMemo(() => contacts.filter(contact => `${contact.name} ${contact.organization ?? ""}`.toLocaleLowerCase().includes(contactFilter.toLocaleLowerCase())).slice(0, 30), [contacts, contactFilter]);
+  const filteredContacts = useMemo(() => contacts.filter(contact => normalizeSearch(`${contact.name} ${contact.organization ?? ""}`).includes(normalizeSearch(contactFilter))).sort((a, b) => searchRank(a.name, contactFilter) - searchRank(b.name, contactFilter)).slice(0, 30), [contacts, contactFilter]);
   const sortedResults = useMemo(() => orderByDate(results, sortOrder), [results, sortOrder]);
   const visibleItems = useMemo(() => orderByDate((snapshot?.items ?? []).filter(item => item.status === tab && (!contactId || item.contact_id === contactId)), sortOrder), [snapshot, tab, contactId, sortOrder]);
   const visibleCandidates = candidateTab === "search" ? candidateResults : (snapshot?.candidates ?? []).filter(item => item.status === candidateTab && (!contactId || item.contact_id === contactId)).map(item => ({ ...item.payload!, id: item.id, contact_id: item.contact_id, status: item.status }));

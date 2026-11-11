@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch } from "./search";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Maximize2, Minus, Network, Plus, RotateCcw, Search, Tag, UsersRound } from "lucide-react";
@@ -26,7 +27,7 @@ const CONTACT_LIMIT = 180;
 const FOCUSED_CONTACT_LIMIT = 80;
 const ALWAYS_LABEL_LIMIT = 36;
 
-const normalize = (value: string) => value.toLocaleLowerCase();
+const normalize = normalizeSearch;
 const hash = (value: string) => {
   let result = 2166136261;
   for (let index = 0; index < value.length; index += 1) {

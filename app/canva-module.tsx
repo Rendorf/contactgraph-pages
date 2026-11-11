@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch, searchRank } from "./search";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -223,8 +224,8 @@ export function CanvaModule({ contacts }: { contacts: CanvasContact[] }) {
   const editingNode = draft?.nodes.find((node) => node.id === editingNodeId) ?? null;
   const contactsById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
   const selectedContacts = editingNode?.contact_ids.map((id) => contactsById.get(id)).filter((contact): contact is CanvasContact => Boolean(contact)) ?? [];
-  const needle = contactQuery.trim().toLocaleLowerCase();
-  const matchedContacts = contacts.filter((contact) => !editingNode?.contact_ids.includes(contact.id) && (!needle || `${contact.name} ${contact.organization ?? ""} ${contact.role ?? ""}`.toLocaleLowerCase().includes(needle))).slice(0, 100);
+  const needle = normalizeSearch(contactQuery);
+  const matchedContacts = contacts.filter((contact) => !editingNode?.contact_ids.includes(contact.id) && (!needle || normalizeSearch(`${contact.name} ${contact.organization ?? ""} ${contact.role ?? ""}`).includes(needle))).sort((a, b) => searchRank(a.name, contactQuery) - searchRank(b.name, contactQuery)).slice(0, 100);
 
   const board = readKanban(draft?.kanban);
   const viewSwitch = <div className="canvas-view-switch" role="group" aria-label="Canvas view">

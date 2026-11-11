@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch, searchRank } from "./search";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -70,7 +71,7 @@ const textFields = [
 const mergeTextFields = [...textFields, ["notes", "Notes"], ["photo_file", "Photo file"]] as const;
 const mergeListFields = ["industries", "topics", "events", "interests", "locations", "groups", "labels", "emails", "phones", "websites", "socials", "addresses", "sources", "positions"] as const;
 
-const normalize = (value: unknown) => String(value ?? "").toLocaleLowerCase();
+const normalize = normalizeSearch;
 const initials = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "?") + (parts.length > 1 ? parts.at(-1)?.[0] ?? "" : "")).toUpperCase();
@@ -684,7 +685,8 @@ export default function Home() {
     return contacts.filter((contact) => (!needle || contactSearchText(contact).includes(needle))
       && (!selectedPositions.length || selectedPositions.includes(contact.role?.trim() ?? ""))
       && (!selectedOrganizations.length || selectedOrganizations.includes(contact.organization?.trim() ?? ""))
-      && selectedTags.every((tag) => (contact.labels ?? []).includes(tag)));
+      && selectedTags.every((tag) => (contact.labels ?? []).includes(tag)))
+      .sort((a, b) => searchRank(a.name, query) - searchRank(b.name, query));
   }, [contacts, query, selectedTags, selectedPositions, selectedOrganizations]);
   const availableLetters = useMemo(() => [...new Set(matchingContacts.map((contact) => contactInitial(contact.name)))].sort((a, b) => {
     if (a === "#") return 1;
@@ -699,7 +701,8 @@ export default function Home() {
   const mergeDialogContacts = mergeSelection ?? selectedContacts;
   const mergePickerResults = useMemo(() => {
     const needle = normalize(mergePickerQuery.trim());
-    return contacts.filter((contact) => contact.id !== mergePickerContact?.id && (!needle || contactSearchText(contact).includes(needle))).slice(0, 100);
+    return contacts.filter((contact) => contact.id !== mergePickerContact?.id && (!needle || contactSearchText(contact).includes(needle)))
+      .sort((a, b) => searchRank(a.name, mergePickerQuery) - searchRank(b.name, mergePickerQuery)).slice(0, 100);
   }, [contacts, mergePickerContact, mergePickerQuery]);
 
   const openContact = useCallback((contact: Contact) => {

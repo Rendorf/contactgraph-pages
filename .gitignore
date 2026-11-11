@@ -84,6 +84,7 @@ next-env.d.ts
 !/app/auth-context.tsx
 !/app/settings-module.tsx
 !/app/data-use-notice.tsx
+!/app/search.tsx
 !/app/sync-settings.tsx
 !/app/globals.css
 !/components/

@@ -1,4 +1,5 @@
 "use client";
+import { normalizeSearch, searchRank } from "./search";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { CalendarDays, Pencil, Plus, Save, Trash2, X } from "lucide-react";
@@ -15,7 +16,7 @@ const participants = (meeting: Meeting) => meeting.contact_ids?.length ? meeting
 function ParticipantPicker({ contacts, selected, onChange, lockedId }: { contacts: MeetingContact[]; selected: string[]; onChange: (ids: string[]) => void; lockedId?: string }) {
   const [search, setSearch] = useState("");
   const byId = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
-  const matches = contacts.filter((contact) => `${contact.name} ${contact.organization ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 80);
+  const matches = contacts.filter((contact) => normalizeSearch(`${contact.name} ${contact.organization ?? ""}`).includes(normalizeSearch(search))).sort((a, b) => searchRank(a.name, search) - searchRank(b.name, search)).slice(0, 80);
   return <div className="meeting-participants"><span className="meeting-participants-label">People at this meeting</span>
     <div className="meeting-selected">{selected.length ? selected.map((id) => <span key={id}>{byId.get(id)?.name ?? "Contact unavailable"}{id !== lockedId && <button type="button" onClick={() => onChange(selected.filter((item) => item !== id))} aria-label={`Remove ${byId.get(id)?.name ?? "contact"}`}><X /></button>}</span>) : <small>Choose at least one contact</small>}</div>
     <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a contact to add…" aria-label="Search meeting contacts" />
@@ -137,7 +138,7 @@ export function MeetingsModule({ contacts }: { contacts: MeetingContact[] }) {
     toast.success("Meeting deleted");
   };
   const startEdit = (meeting: Meeting) => { setEditingId(meeting.id); setContactIds(participants(meeting)); setDate(meeting.date); setInsights(meeting.insights); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const filtered = meetings.filter((meeting) => `${participants(meeting).map((id) => `${byId.get(id)?.name ?? ""} ${byId.get(id)?.organization ?? ""}`).join(" ")} ${meeting.insights}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const filtered = meetings.filter((meeting) => normalizeSearch(`${participants(meeting).map((id) => `${byId.get(id)?.name ?? ""} ${byId.get(id)?.organization ?? ""}`).join(" ")} ${meeting.insights}`).includes(normalizeSearch(query)));
   return <main className="meetings-module">
     <div className="module-heading"><div><p className="eyebrow">Relationship journal</p><h1 className="module-title">Meetings</h1><p className="module-subtitle">Keep dated notes and insights, linked to the people you met.</p></div><div className="meeting-count"><CalendarDays />{meetings.length} {meetings.length === 1 ? "meeting" : "meetings"}</div></div>
     {(can("meetings.create") || (editingId && can("meetings.edit"))) && <section className="meeting-editor"><div className="meeting-editor-heading"><div><span className="meeting-editor-icon"><Plus /></span><div><h2>{editingId ? "Edit meeting notes" : "Log a meeting"}</h2><p>Notes will also appear in the linked contact’s details.</p></div></div>{editingId && <Button variant="ghost" size="sm" onClick={reset}><X />Cancel edit</Button>}</div>

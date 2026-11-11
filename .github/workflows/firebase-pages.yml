@@ -26,6 +26,7 @@ jobs:
       - run: npm run check:firebase-permissions
       - run: npm run test:firebase-quota
       - run: npm run test:canvas-kanban
+      - run: npm run test:search
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
