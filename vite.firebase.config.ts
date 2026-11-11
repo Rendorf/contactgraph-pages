@@ -16,7 +16,6 @@ export default defineConfig({
       { find: /^\.\/auth-context$/, replacement: `${root}auth-context.tsx` },
       { find: /^\.\/settings-module$/, replacement: `${root}settings-module.tsx` },
       { find: /^\.\/offline-status$/, replacement: `${root}offline-status.tsx` },
-      { find: /^\.\/osint-module$/, replacement: `${root}osint-module.tsx` },
     ],
   },
   build: { outDir: fileURLToPath(new URL("./firebase-pages-dist/", import.meta.url)), emptyOutDir: true },

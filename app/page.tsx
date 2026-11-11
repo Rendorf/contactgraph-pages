@@ -585,8 +585,12 @@ export default function Home() {
   const [contactMergeOpen, setContactMergeOpen] = useState(false);
   useEffect(() => {
     let active = true;
-    fetch("/api/osint").then(response => { if (active) setOsintAvailable(response.ok); }).catch(() => undefined);
-    return () => { active = false; };
+    const check = () => { void fetch("/api/osint/availability", { cache: "no-store" }).then(response => { if (active) setOsintAvailable(response.ok); }).catch(() => { if (active) setOsintAvailable(false); }); };
+    check();
+    const timer = window.setInterval(check, 60_000);
+    window.addEventListener("online", check);
+    window.addEventListener("focus", check);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("online", check); window.removeEventListener("focus", check); };
   }, []);
   useEffect(() => {
     const refreshAfterSync = () => {

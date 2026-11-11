@@ -4,7 +4,7 @@ import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
 import permissionModules from "./permission-catalog.json";
 import { overlay, queueDelete, queuePut, syncPending } from "./offline";
 import { isFirestoreQuotaExceeded } from "./quota.mjs";
-import { hermesRequest } from "./hermes-api";
+import { hermesOsintFetch, hermesRequest } from "./hermes-api";
 
 type Json = Record<string, any>;
 type Item = Json & { id: string; revision?: number };
@@ -483,7 +483,7 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
       }
       return response({ error: "This follow-up action is unavailable in the Pages app." }, 501);
     }
-    if (path === "/api/osint") return response({ error: "OSINT collection requires a private server." }, 503);
+    if (path === "/api/osint" || path.startsWith("/api/osint/")) return hermesOsintFetch(path, options);
     return response({ error: "This feature is not yet available in the Firebase Pages app." }, 501);
   } catch (error) { return errorResponse(error); }
 }
