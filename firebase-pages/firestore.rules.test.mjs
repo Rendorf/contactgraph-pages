@@ -12,6 +12,10 @@ await env.withSecurityRulesDisabled(async (context) => {
   await db.doc("members/tagger@example.com").set({ id: "tagger@example.com", email: "tagger@example.com", role_id: "tagger", active: true });
   await db.doc("roles/assistant").set({ id: "assistant", name: "Assistant", permissions: ["contacts.view", "contacts.create", "contacts.edit", "meetings.view"] });
   await db.doc("roles/tagger").set({ id: "tagger", name: "Tag editor", permissions: ["contacts.view", "tags.edit"] });
+  for (const role of ["merger", "merger-deleter"]) {
+    await db.doc(`members/${role}@example.com`).set({ email: `${role}@example.com`, role_id: role, active: true });
+    await db.doc(`roles/${role}`).set({ id: role, permissions: ["contacts.view", "contacts.merge", ...(role === "merger-deleter" ? ["contacts.delete"] : [])] });
+  }
   await db.doc("contacts/person-1").set({ id: "person-1", name: "Person One", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [] });
   await db.doc("contacts/person-2").set({ id: "person-2", name: "Person Two", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [], private_note: "Keep this" });
 });
@@ -70,6 +74,43 @@ test("private photos and unknown collections stay closed", async () => {
   await assertFails(assistant.doc("photo_chunks/person-1_0").set({ id: "person-1_0", contact_id: "person-1", index: 0, total: 1, mime: "text/plain", data: "AA==" }));
   await assertSucceeds(assistant.doc("photo_chunks/person-1_0").set({ id: "person-1_0", contact_id: "person-1", index: 0, total: 1, mime: "image/jpeg", sha256: "0".repeat(64), data: "AA==" }));
   await assertFails(owner.doc("unexpected/private").get());
+});
+
+test("merge permission cannot delete contacts; an authorized merge is atomic", async () => {
+  await owner.doc("contacts/merge-target").set(contact("merge-target", 1, "owner-uid"));
+  await owner.doc("contacts/merge-source").set(contact("merge-source", 1, "owner-uid"));
+  const mergeOnly = google("merger@example.com", "merger-uid");
+  await assertFails(mergeOnly.doc("contacts/merge-source").delete());
+  const denied = mergeOnly.batch();
+  denied.set(mergeOnly.doc("contacts/merge-target"), contact("merge-target", 2, "merger-uid", "Merged"));
+  denied.delete(mergeOnly.doc("contacts/merge-source"));
+  await assertFails(denied.commit());
+  if ((await owner.doc("contacts/merge-target").get()).data().revision !== 1) throw new Error("Denied merge partially applied");
+  const merger = google("merger-deleter@example.com", "merger-deleter-uid");
+  const allowed = merger.batch();
+  allowed.set(merger.doc("contacts/merge-target"), contact("merge-target", 2, "merger-deleter-uid", "Merged"));
+  allowed.delete(merger.doc("contacts/merge-source"));
+  await assertSucceeds(allowed.commit());
+});
+
+test("photos require canonical ownership, a surviving contact, and a valid digest", async () => {
+  const photo = (contactId, index = 0) => ({ id: `${contactId}_${index}`, contact_id: contactId, index, total: 2, mime: "image/jpeg", sha256: "a".repeat(64), data: "AA==" });
+  await assertFails(assistant.doc("photo_chunks/missing_0").set(photo("missing")));
+  await assertFails(assistant.doc("photo_chunks/wrong-id").set({ ...photo("person-1"), id: "wrong-id" }));
+  await assertFails(assistant.doc("photo_chunks/person-1_0").set({ ...photo("person-1"), contact_id: "person-2" }));
+  await assertFails(assistant.doc("photo_chunks/person-1_0").set({ ...photo("person-1"), index: 1 }));
+  await assertFails(assistant.doc("photo_chunks/person-1_0").set({ ...photo("person-1"), sha256: "z".repeat(64) }));
+  const create = assistant.batch();
+  create.set(assistant.doc("contacts/photo-new"), contact("photo-new", 1, "assistant-uid"));
+  create.set(assistant.doc("photo_chunks/photo-new_0"), photo("photo-new"));
+  await assertSucceeds(create.commit());
+  const orphan = owner.batch();
+  orphan.delete(owner.doc("contacts/photo-new"));
+  orphan.set(owner.doc("photo_chunks/photo-new_1"), photo("photo-new", 1));
+  await assertFails(orphan.commit());
+  // Cleanup must remain possible even after legacy data lost its contact.
+  await env.withSecurityRulesDisabled(async (context) => context.firestore().doc("contacts/photo-new").delete());
+  await assertSucceeds(assistant.doc("photo_chunks/photo-new_0").delete());
 });
 
 test("three-way sync requests are authorized, single-flight, and cannot forge results", async () => {

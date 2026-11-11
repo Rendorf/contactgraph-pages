@@ -57,7 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [generation]);
 
   const refresh = useCallback(async () => { setGeneration((value) => value + 1); }, []);
-  const can = (permission: string) => Boolean(user && !unavailable.has(permission) && (user.permissions.includes("*") || user.permissions.includes(permission)));
+  const granted = (permission: string) => Boolean(user && (user.permissions.includes("*") || user.permissions.includes(permission)));
+  // Both operations remove contacts. Firestore rules independently enforce deletion.
+  const can = (permission: string) => !unavailable.has(permission) && granted(permission)
+    && (!["contacts.merge", "duplicates.manage"].includes(permission) || granted("contacts.delete"));
   const login = async () => {
     if (!auth) return;
     setError("");

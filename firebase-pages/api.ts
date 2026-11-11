@@ -457,7 +457,7 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
     }
     if (path === "/api/holidays/regenerate-message" && method === "POST") {
       const body = parse(options);
-      const generated = await hermesRequest("holiday", { method, body: JSON.stringify({ holiday_id: body.holiday_id, language: body.language, guidance: body.guidance, contact_ids: [body.contact_id] }) }) as { messages: Json[] };
+      const generated = await hermesRequest("holiday", { method, body: JSON.stringify({ holiday_id: body.holiday_id, language: body.language, guidance: body.guidance, include_notes: body.include_notes === true, contact_ids: [body.contact_id] }) }) as { messages: Json[] };
       return response({ message: await saveGeneratedMessage(generated.messages[0]) });
     }
     if (path === "/api/followups" && method === "GET") return response(await followupsView());

@@ -83,6 +83,7 @@ next-env.d.ts
 !/app/offline-status.tsx
 !/app/auth-context.tsx
 !/app/settings-module.tsx
+!/app/data-use-notice.tsx
 !/app/sync-settings.tsx
 !/app/globals.css
 !/components/
@@ -122,3 +123,6 @@ next-env.d.ts
 # Added 2026-11-08: never publish file-sync conflict copies or macOS metadata.
 *.sync-conflict-*
 ._*
+
+# Python migration/tool caches are never public source.
+__pycache__/

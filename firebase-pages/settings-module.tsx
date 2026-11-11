@@ -1,3 +1,4 @@
+import { ExternalDataNotice } from "../app/data-use-notice";
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, runTransaction } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
@@ -133,6 +134,7 @@ function OpenAiCard() {
 export function SettingsModule({ embedded = false }: { embedded?: boolean }) {
   return <div className={embedded ? "settings-content" : "settings-module"}>
     {!embedded && <div className="module-heading"><div><p className="eyebrow">Administration</p><h1 className="module-title">Settings</h1></div></div>}
+    <ExternalDataNotice />
     <div className="settings-grid"><ThreeWaySyncCard /><OpenAiCard /><TrustedDeviceCard /><section className="settings-card"><div className="settings-card-body"><h2>Live OSINT</h2><p>Live OSINT collection still requires a private server. Saved history remains private.</p></div></section></div>
   </div>;
 }

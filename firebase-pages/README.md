@@ -19,7 +19,7 @@ at the domain root. Site delivery and normal Firestore-backed edits no longer
 depend on the Hermes VM. The old Tunnel configuration remains available for
 rollback but is not the public DNS target.
 
-The published site serves the core CRM modules. The Mac app can be reconciled with Firestore from **Settings → Integrations → Mac · Firebase sync → Sync Mac and Firebase**. The Mac must be awake with Docker and its installed sync runner available. The runner checks queued requests every 30 seconds and does not require Hermes. Conflicts stop the sync for review; verified backups are taken before applying changes. Hermes remains a separate legacy instance. Use the Pages app for new shared edits. Keep the closed-file backups and reconciliation report until the old instances are retired.
+The published site serves the core CRM modules. The Mac app can be reconciled with Firestore from **Settings → Integrations → Mac · Firebase sync → Sync Mac and Firebase**. The Mac must be awake with Docker and its installed sync runner available. The runner checks queued requests every 30 seconds and does not require Hermes. Conflicts stop the sync for review; verified backups are taken before applying changes. Mac and Hermes remain independently editable replicas. Full three-way CLI sync includes Hermes; the dashboard preserves its previous baseline when Hermes is absent. Keep closed-file backups and reconciliation reports until verification succeeds.
 
 ## Current migration snapshot
 
@@ -45,7 +45,7 @@ The private 2026-10-27 export was made from a closed copy of the **running local
    The first command is a dry run. The import refuses nonempty target collections. If an import stops partway through, rerun the same command with `--resume`; it checks already imported documents against the snapshot before continuing. The Owner email is required because the local DuckDB account was not bound to one; the Assistant email is already bound in the private export. Admin SDK access bypasses Firestore rules, so restrict those credentials and delete temporary credentials after import.
 
 4. Create a public GitHub repository from the staged, allowlisted source files. Set repository variables `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, and `FIREBASE_APP_ID` from the Firebase web app configuration. The Firebase web API key identifies the project; it is not a server secret. Enable GitHub Pages with **GitHub Actions** as its source. The workflow runs typechecking, rules tests, a static build, and an artifact safety check before publishing. For a custom domain set `PAGES_BASE_PATH` to `/`; for a project Pages URL, leave it unset.
-5. Test sign-in using the bound Owner and Assistant accounts, the role permissions, all core modules, one edit on each device, and offline conflict review. Once satisfied, make Firestore the editing source of truth. Keep Hermes and the local DuckDB read-only until their remaining changes are reconciled. There is no automatic bidirectional DuckDB ↔ Firestore sync in this release.
+5. Test sign-in using the bound Owner and Assistant accounts, the role permissions, all core modules, one edit on each device, and offline conflict review. Mac and Firestore support independent edits with version checks. Use the installed dashboard runner to reconcile them; Hermes is optional. Conflicting edits stop for review.
 
 ## Offline and permissions
 
@@ -82,3 +82,10 @@ npm run check:firebase-pages
 ```
 
 The local Hermes build remains `npm run build` in the complete synced folder.
+
+
+## Permission and privacy maintenance
+
+`../scripts/permission_catalog.py` in the private workspace is canonical. Run `../scripts/generate_permission_catalog.py` there to regenerate this directory's JSON and rule allowlist, and use `--check` before release. Public CI checks JSON against rules. Contact merges require `contacts.delete` when source records are removed. Photo writes require a canonical chunk ID and a contact that exists after the atomic write; ownership cannot be changed in place.
+
+Message composers disclose the data sent to OpenAI. Saved notes are excluded by default, limited to 2,000 characters when selected, and the notes checkbox resets after each generation request. Regenerating from saved message history excludes notes. Settings explains OpenAI, search services, Firebase, and trusted-device storage.

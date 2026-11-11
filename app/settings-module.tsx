@@ -1,4 +1,5 @@
 "use client";
+import { ExternalDataNotice } from "./data-use-notice";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, KeyRound, LockKeyhole, PlugZap, Save, Settings2, Trash2 } from "lucide-react";
@@ -94,6 +95,7 @@ export function SettingsModule({ embedded = false }: { embedded?: boolean }) {
   return <div className={embedded ? "settings-content" : "settings-module"}>
     {!embedded && <div className="module-heading"><div><p className="eyebrow">Administration</p><h1 className="module-title">Settings</h1><p className="module-subtitle">Manage integrations and reusable application configuration.</p></div></div>}
 
+    <ExternalDataNotice />
     <div className="settings-grid">
       {!offline && <section className="settings-card settings-primary-card">
         <header><div className="settings-icon"><KeyRound /></div><div><h2>OpenAI</h2><p>Used for holiday posts and future AI-assisted features.</p></div><span className={`integration-status ${status.configured ? "connected" : ""}`}>{status.configured ? <><CheckCircle2 />Connected</> : "Not configured"}</span></header>

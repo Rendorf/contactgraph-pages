@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useAuth } from "./auth-context";
+import { GenerationDataNotice } from "./data-use-notice";
 
 type BirthdayContact = {
   id: string;
@@ -32,6 +33,7 @@ function todayInBaku() {
 export function BirthdayMessageComposer({ contact, compact = false, onUpdated }: { contact: BirthdayContact; compact?: boolean; onUpdated?: () => void }) {
   const [language, setLanguage] = useState("Azerbaijani");
   const [guidance, setGuidance] = useState("");
+  const [includeNotes, setIncludeNotes] = useState(false);
   const [message, setMessage] = useState<BirthdayMessage | null>(null);
   const [configured, setConfigured] = useState(false);
   const [model, setModel] = useState("");
@@ -45,10 +47,12 @@ export function BirthdayMessageComposer({ contact, compact = false, onUpdated }:
     }).catch(() => undefined);
     return () => { active = false; };
   }, []);
+  useEffect(() => { setIncludeNotes(false); }, [contact.id]);
   const generate = async () => {
     setWorking(true);
+    setIncludeNotes(false);
     try {
-      const response = await fetch("/api/birthdays/generate-message", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contact_id: contact.id, language, guidance }) });
+      const response = await fetch("/api/birthdays/generate-message", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ contact_id: contact.id, language, guidance, include_notes: includeNotes }) });
       const body = await response.json().catch(() => ({})) as { message?: BirthdayMessage; error?: string };
       if (!response.ok || !body.message) throw new Error(body.error || "Birthday message could not be generated");
       setMessage(body.message); setDirty(false);
@@ -105,6 +109,7 @@ export function BirthdayMessageComposer({ contact, compact = false, onUpdated }:
   return <div className={compact ? "birthday-composer compact" : "birthday-composer"}>
     {!compact && <div className="birthday-composer-heading"><div><strong><Cake />Birthday greeting</strong><small>{configured ? `Ready with ${model}` : "Add your OpenAI API key in Settings to generate"}</small></div></div>}
     <label className="generation-guidance birthday-guidance"><span>Optional extra guidance</span><Textarea maxLength={2000} rows={2} value={guidance} onChange={(event) => setGuidance(event.target.value)} placeholder="Style, tone, details to mention, or anything to avoid…" /><small>Added to the prompt for this greeting (up to 2,000 characters).</small></label>
+    <GenerationDataNotice includeNotes={includeNotes} onChange={setIncludeNotes} disabled={working} />
     <div className="birthday-compose-controls"><NativeSelect value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Birthday message language">{languages.map((item) => <NativeSelectOption key={item} value={item}>{item}</NativeSelectOption>)}</NativeSelect><Button onClick={() => void generate()} disabled={working || !configured}><Sparkles />{working ? "Working…" : "Generate birthday message"}</Button></div>
     {message && <><label className="birthday-draft-label"><span>Editable {message.status === "sent" ? "sent message" : "draft"}{dirty ? " · unsaved" : ""}</span><Textarea value={message.content} onChange={(event) => { setMessage({ ...message, content: event.target.value }); setDirty(true); }} aria-label={`Birthday message for ${contact.name}`} /></label><div className="birthday-message-actions"><Button size="sm" variant="outline" onClick={() => void save()} disabled={!dirty || working}>Save edit</Button><Button size="sm" variant="outline" onClick={() => void copy()}>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy"}</Button><Button size="sm" onClick={() => void share()}><Send />Open to send</Button>{message.status !== "sent" && <Button size="sm" variant="ghost" onClick={() => void markSent()} disabled={working}>Mark sent</Button>}</div></>}
   </div>;

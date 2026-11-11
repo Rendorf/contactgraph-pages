@@ -11,6 +11,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ContactMessageHistory } from "./contact-message-history";
 import { useAuth } from "./auth-context";
+import { GenerationDataNotice } from "./data-use-notice";
 
 type Holiday = {
   id: string;
@@ -88,6 +89,7 @@ function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigu
   const [recipientQuery, setRecipientQuery] = useState("");
   const [recipientTag, setRecipientTag] = useState("");
   const [guidance, setGuidance] = useState("");
+  const [includeNotes, setIncludeNotes] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [messages, setMessages] = useState<GeneratedMessage[]>([]);
   const [showPicker, setShowPicker] = useState(true);
@@ -110,6 +112,7 @@ function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigu
       return matchesTag && (!needle || searchable.includes(needle));
     });
   }, [contacts, recipientQuery, recipientTag]);
+  useEffect(() => { setIncludeNotes(false); }, [open, holiday?.id]);
   const selectedContacts = useMemo(() => contacts.filter((contact) => selectedIds.has(contact.id)), [contacts, selectedIds]);
   const toggleRecipient = (contactId: string) => setSelectedIds((current) => {
     const next = new Set(current);
@@ -127,9 +130,10 @@ function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigu
   const generate = async () => {
     if (!holiday || !serverConfigured || selectedIds.size === 0) return;
     setGenerating(true);
+    setIncludeNotes(false);
     setMessages([]);
     try {
-      const response = await fetch("/api/holidays/generate-messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ holiday_id: holiday.id, language, contact_ids: [...selectedIds], guidance }) });
+      const response = await fetch("/api/holidays/generate-messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ holiday_id: holiday.id, language, contact_ids: [...selectedIds], guidance, include_notes: includeNotes }) });
       const body = await response.json().catch(() => ({})) as { messages?: GeneratedMessage[]; error?: string };
       if (!response.ok) throw new Error(body.error ?? "Message generation failed");
       setMessages(body.messages ?? []);
@@ -198,6 +202,7 @@ function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigu
             <label><span>Filter by tag</span><NativeSelect className="w-full" value={recipientTag} onChange={(event) => setRecipientTag(event.target.value)}><NativeSelectOption value="">All tags</NativeSelectOption>{tags.map(([tag, count]) => <NativeSelectOption key={tag} value={tag}>{tag} ({count})</NativeSelectOption>)}</NativeSelect></label>
             <label><span>Message language</span><NativeSelect className="w-full" value={language} onChange={(event) => setLanguage(event.target.value)}>{languageOptions.map((option) => <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>)}</NativeSelect></label>
           </div>
+          <GenerationDataNotice includeNotes={includeNotes} onChange={setIncludeNotes} disabled={generating} />
           <label className="generation-guidance"><span>Optional extra guidance</span><Textarea maxLength={2000} rows={2} value={guidance} onChange={(event) => setGuidance(event.target.value)} placeholder="Style, tone, details to mention, or anything to avoid…" /><small>Applied to every generated message. Factual and contact-specific guidance still takes priority.</small></label>
           <div className="recipient-actions"><span><strong>{selectedIds.size}</strong> selected · maximum 50 per batch</span><div><Button size="sm" variant="outline" onClick={selectFiltered} disabled={filteredContacts.length === 0}>Select filtered ({filteredContacts.length})</Button><Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} disabled={selectedIds.size === 0}>Clear</Button></div></div>
           <div className="recipient-picker-grid">
