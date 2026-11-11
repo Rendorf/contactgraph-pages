@@ -46,10 +46,15 @@ def export(database: Path, output: Path, osint_database: Path | None = None) -> 
                    for id_, username, display_name, role_id, active, email in connection.execute(
                        "SELECT id, username, display_name, role_id, active, email FROM auth_users"
                    ).fetchall()]
+        posts = [dict(zip(("sequence", "holiday_id", "variant", "language", "content", "model", "created_at"), row))
+                 for row in connection.execute(
+                     "SELECT sequence, holiday_id, variant, language, content, model, created_at::VARCHAR FROM holiday_posts ORDER BY sequence"
+                 ).fetchall()]
         data = {
             "contacts": list_contacts(connection),
             "holidays": list_holidays(connection),
             "holiday_messages": list_holiday_messages(connection),
+            "holiday_posts": posts,
             "canvases": list_canvases(connection),
             "meetings": list_meetings(connection),
             "followup_actions": actions,
