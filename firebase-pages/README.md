@@ -19,7 +19,7 @@ at the domain root. Site delivery and normal Firestore-backed edits no longer
 depend on the Hermes VM. The old Tunnel configuration remains available for
 rollback but is not the public DNS target.
 
-The published site serves the core CRM modules. The local and Hermes DuckDB apps remain separate legacy instances; edits there do not automatically sync to Firestore. Use the Pages app for new shared edits. Keep the closed-file backups and reconciliation report until the old instances are retired.
+The published site serves the core CRM modules. The Mac app can be reconciled with Firestore from **Settings → Integrations → Mac · Firebase sync → Sync Mac and Firebase**. The Mac must be awake with Docker and its installed sync runner available. The runner checks queued requests every 30 seconds and does not require Hermes. Conflicts stop the sync for review; verified backups are taken before applying changes. Hermes remains a separate legacy instance. Use the Pages app for new shared edits. Keep the closed-file backups and reconciliation report until the old instances are retired.
 
 ## Current migration snapshot
 

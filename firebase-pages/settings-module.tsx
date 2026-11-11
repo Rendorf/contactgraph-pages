@@ -14,7 +14,7 @@ type SyncControl = {
   started_at?: string;
   finished_at?: string;
   error?: string;
-  result?: { contacts?: number; meetings?: number; firestore_writes?: number; local_changes?: number; hermes_changes?: number };
+  result?: { contacts?: number; meetings?: number; firestore_writes?: number; local_changes?: number; hermes_changes?: number; hermes_included?: boolean };
 };
 
 function ThreeWaySyncCard() {
@@ -34,7 +34,7 @@ function ThreeWaySyncCard() {
   }, [can]);
   useEffect(() => {
     if (!submittedId || control?.request_id !== submittedId) return;
-    if (control.status === "succeeded") { toast.success("Hermes, Mac and Firebase are synchronized."); setSubmittedId(""); }
+    if (control.status === "succeeded") { toast.success(control.result?.hermes_included ? "Hermes, Mac and Firebase are synchronized." : "Mac and Firebase are synchronized."); setSubmittedId(""); }
     if (control.status === "failed" || control.status === "conflicts") { toast.error(control.error || "Sync needs attention on the Mac."); setSubmittedId(""); }
   }, [control, submittedId]);
   if (!can("sync.run")) return null;
@@ -61,18 +61,18 @@ function ThreeWaySyncCard() {
   };
   return <section className="settings-card settings-primary-card" aria-live="polite">
     <div className="settings-card-body">
-      <h2>Hermes · Mac · Firebase</h2>
-      <p>Merge contact, meeting, holiday, canvas, follow-up, OSINT and photo changes across your three data stores.</p>
+      <h2>Mac · Firebase sync</h2>
+      <p>Merge contact, meeting, holiday, canvas, follow-up, OSINT and photo changes between this Mac and Firebase. This sync works while Hermes is offline.</p>
       {error && <p role="alert">{error}</p>}
       <div className="settings-current">
         <div><span>Sync status</span><strong>{loading ? "Loading…" : control?.status === "queued" ? "Waiting for Mac" : control?.status === "running" ? "Synchronizing…" : control?.status === "succeeded" ? "Completed" : control?.status === "conflicts" ? "Needs conflict review" : control?.status === "failed" ? "Failed" : "Ready"}</strong></div>
         <div><span>Mac runner</span><strong>{loading ? "Checking…" : runnerOnline ? "Online" : "Offline"}</strong></div>
         {control?.finished_at && <div><span>Last finished</span><strong>{new Date(control.finished_at).toLocaleString()}</strong></div>}
       </div>
-      {control?.status === "succeeded" && control.result && <p role="status">{control.result.contacts ?? 0} contacts · {control.result.meetings ?? 0} meetings · {control.result.firestore_writes ?? 0} Firebase changes · {control.result.local_changes ?? 0} Mac changes · {control.result.hermes_changes ?? 0} Hermes changes</p>}
+      {control?.status === "succeeded" && control.result && <p role="status">{control.result.contacts ?? 0} contacts · {control.result.meetings ?? 0} meetings · {control.result.firestore_writes ?? 0} Firebase changes · {control.result.local_changes ?? 0} Mac changes{control.result.hermes_included ? ` · ${control.result.hermes_changes ?? 0} Hermes changes` : " · Hermes excluded"}</p>}
       {(control?.status === "failed" || control?.status === "conflicts") && <p role="alert">{control.error || "Review the private sync report on the Mac."}</p>}
-      <Button disabled={loading || submitting || busy || Boolean(error)} onClick={() => void run()}>{submitting ? "Requesting…" : control?.status === "running" ? "Sync in progress" : control?.status === "queued" ? "Waiting for Mac" : "Run three-way sync"}</Button>
-      {!runnerOnline && !loading && <p>The Mac must be awake with Docker and Tailscale running. A request will wait until its runner starts.</p>}
+      <Button disabled={loading || submitting || busy || Boolean(error)} onClick={() => void run()}>{submitting ? "Requesting…" : control?.status === "running" ? "Sync in progress" : control?.status === "queued" ? "Waiting for Mac" : "Sync Mac and Firebase"}</Button>
+      {!runnerOnline && !loading && <p>The Mac must be awake with Docker running and an internet connection. A request will wait until its runner starts.</p>}
     </div>
   </section>;
 }
