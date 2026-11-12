@@ -15,7 +15,7 @@ const output = path.resolve(arg("file") || "");
 const passphrase = process.env.CONTACTGRAPH_BACKUP_PASSPHRASE;
 if ((mode !== "self-test" && !arg("file")) || (arg("file") && output.startsWith(`${appRoot}${path.sep}`))) throw new Error("Choose a backup file outside the public source repository.");
 if (!passphrase || passphrase.length < 20) throw new Error("Set CONTACTGRAPH_BACKUP_PASSPHRASE to a private passphrase of at least 20 characters.");
-const collections = ["contacts", "holidays", "holiday_messages", "canvases", "meetings", "followup_actions", "followup_settings", "roles", "members", "photo_chunks", "osint_settings", "osint_monitors", "osint_feeds", "osint_items", "osint_runs", "osint_candidates", "osint_provider_findings"];
+const collections = ["contacts", "holidays", "holiday_messages", "canvases", "meetings", "followup_actions", "followup_settings", "calendar_occurrence_states", "roles", "members", "photo_chunks", "osint_settings", "osint_monitors", "osint_feeds", "osint_items", "osint_runs", "osint_candidates", "osint_provider_findings"];
 const aad = Buffer.from("ContactGraph Firestore backup v1");
 
 function decrypt(file) {

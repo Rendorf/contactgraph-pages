@@ -127,3 +127,8 @@ next-env.d.ts
 
 # Python migration/tool caches are never public source.
 __pycache__/
+
+!app/calendar-model.tsx
+!app/calendar-data.tsx
+!app/calendar-module.tsx
+!firebase-pages/calendar.test.mjs

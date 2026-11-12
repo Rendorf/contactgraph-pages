@@ -142,3 +142,32 @@ test("canvas Kanban validates board-local columns and enforces existing permissi
   await assertFails(owner.doc("canvases/kanban-board").set({ ...updated, kanban: { ...board.kanban, columns: { todo: 42 } } }));
   await assertSucceeds(owner.doc("canvases/kanban-board").set({ ...updated, kanban: { ...board.kanban, columns: { todo: "Ready" } } }));
 });
+
+test('calendar outcomes enforce source permissions, identity, dates and revisions', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await db.doc('contacts/calendar-person').set({ id: 'calendar-person', birthday: '--02-29' });
+    await db.doc('holidays/calendar-holiday').set({ id: 'calendar-holiday', start_date: '2026-11-12', recurrence: ['RRULE:FREQ=YEARLY'] });
+    await db.doc('members/calendar-editor@example.com').set({ role_id: 'calendar-editor', active: true });
+    await db.doc('roles/calendar-editor').set({ permissions: ['contacts.view', 'drafts.manage'] });
+  });
+  const editor = google('calendar-editor@example.com', 'calendar-editor-uid');
+  const item = { id: 'birthday:calendar-person:2028-02-29', event_type: 'birthday', source_id: 'calendar-person', occurrence_date: '2028-02-29', status: 'handled', revision: 1, changed_at: '2026-11-12T00:00:00Z', changed_by: 'owner-uid', updated_by: 'owner-uid', updated_at: '2026-11-12T00:00:00Z' };
+  const ref = owner.doc(`calendar_occurrence_states/${item.id}`);
+  await assertFails(assistant.doc(`calendar_occurrence_states/${item.id}`).set({ ...item, changed_by: 'assistant-uid', updated_by: 'assistant-uid' }));
+  await assertFails(ref.set({ ...item, status: 'sent' }));
+  await assertFails(ref.set({ ...item, unknown: true }));
+  const invalid = { ...item, id: 'birthday:calendar-person:2027-02-29', occurrence_date: '2027-02-29' };
+  await assertFails(owner.doc(`calendar_occurrence_states/${invalid.id}`).set(invalid));
+  await assertSucceeds(ref.set(item));
+  await assertFails(ref.set({ ...item, status: 'open' }));
+  await assertSucceeds(ref.set({ ...item, status: 'open', revision: 2 }));
+  await assertFails(ref.delete());
+  await assertSucceeds(editor.collection('calendar_occurrence_states').where('event_type', '==', 'birthday').get());
+  await assertFails(editor.collection('calendar_occurrence_states').get());
+  const holiday = { ...item, id: 'holiday:calendar-holiday:2027-11-12', event_type: 'holiday', source_id: 'calendar-holiday', occurrence_date: '2027-11-12' };
+  await assertFails(editor.doc(`calendar_occurrence_states/${holiday.id}`).set({ ...holiday, updated_by: 'calendar-editor-uid', changed_by: 'calendar-editor-uid' }));
+  await assertSucceeds(owner.doc(`calendar_occurrence_states/${holiday.id}`).set(holiday));
+  await assertFails(editor.doc(`calendar_occurrence_states/${holiday.id}`).get());
+  await assertFails(env.unauthenticatedContext().firestore().doc(`calendar_occurrence_states/${item.id}`).get());
+});

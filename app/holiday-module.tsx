@@ -14,7 +14,7 @@ import { ContactMessageHistory } from "./contact-message-history";
 import { useAuth } from "./auth-context";
 import { GenerationDataNotice } from "./data-use-notice";
 
-type Holiday = {
+export type Holiday = {
   id: string;
   title: string;
   start_date: string;
@@ -77,7 +77,7 @@ const nextOccurrence = (holiday: Holiday, today: Date) => {
   return { holiday, date, past: !recurring && end <= today };
 };
 
-function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigured, model, onOpenSettings }: {
+export function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigured, model, onOpenSettings }: {
   holiday: Holiday | null;
   contacts: Recipient[];
   open: boolean;
@@ -224,7 +224,7 @@ function MessageGenerator({ holiday, contacts, open, onOpenChange, serverConfigu
   </Dialog><Dialog open={historyContact !== null} onOpenChange={(next) => { if (!next) setHistoryContact(null); }}><DialogContent className="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"><DialogHeader className="shrink-0 border-b px-5 py-5 pr-12"><DialogTitle>{historyContact?.name} · message history</DialogTitle><DialogDescription>All generated drafts and messages manually marked as sent for this contact.</DialogDescription></DialogHeader><div className="contact-history-dialog-body">{historyContact && <ContactMessageHistory contactId={historyContact.id} contactName={historyContact.name} refreshKey={messages.length} />}</div><DialogFooter className="shrink-0 border-t px-5 py-4"><Button variant="outline" onClick={() => setHistoryContact(null)}>Close</Button></DialogFooter></DialogContent></Dialog></>;
 }
 
-function MessageHistory({ open, onOpenChange, contacts, serverConfigured }: {
+export function MessageHistory({ open, onOpenChange, contacts, serverConfigured }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contacts: Recipient[];

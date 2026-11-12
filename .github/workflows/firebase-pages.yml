@@ -27,6 +27,7 @@ jobs:
       - run: npm run test:firebase-quota
       - run: npm run test:canvas-kanban
       - run: npm run test:search
+      - run: npm run test:calendar
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

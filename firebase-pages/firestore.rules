@@ -160,6 +160,46 @@ service cloud.firestore {
       allow update: if allowed('drafts.manage') && validUpdate(id);
       allow delete: if allowed('drafts.manage');
     }
+    match /calendar_occurrence_states/{id} {
+      function canView(kind) {
+        return kind == 'birthday' ? allowed('contacts.view') : kind == 'holiday' && allowed('holidays.view');
+      }
+      function validDay(day) {
+        let parts = day.split('-');
+        let year = int(parts[0]);
+        let month = int(parts[1]);
+        let d = int(parts[2]);
+        return day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && year >= 1 && month >= 1 && month <= 12 && d >= 1
+          && d <= (month == 2 ? (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) ? 29 : 28) : month in [4, 6, 9, 11] ? 30 : 31);
+      }
+      function sourceMatches(data) {
+        let day = data.occurrence_date.split('-');
+        let md = day[1] + '-' + day[2];
+        let source = data.event_type == 'birthday'
+          ? get(/databases/$(database)/documents/contacts/$(data.source_id)).data
+          : get(/databases/$(database)/documents/holidays/$(data.source_id)).data;
+        return data.event_type == 'birthday' ? source.birthday.matches('^.*' + md + '$')
+          : source.start_date == data.occurrence_date || (source.start_date.matches('^.*' + md + '$') && source.recurrence.hasAny(['RRULE:FREQ=YEARLY', 'FREQ=YEARLY']));
+      }
+      function validState() {
+        let data = request.resource.data;
+        return validRecord(id) && canView(data.event_type) && allowed('drafts.manage')
+          && data.keys().hasOnly(['id', 'event_type', 'source_id', 'occurrence_date', 'status', 'revision', 'changed_at', 'changed_by', 'updated_at', 'updated_by'])
+          && data.source_id is string && data.source_id.matches('^[A-Za-z0-9_-]{1,150}$')
+          && data.occurrence_date is string && validDay(data.occurrence_date)
+          && id == data.event_type + ':' + data.source_id + ':' + data.occurrence_date
+          && data.status in ['open', 'handled', 'no_action']
+          && data.changed_by == request.auth.uid && data.changed_at is string && data.changed_at.size() <= 35
+          && sourceMatches(data);
+      }
+      allow read: if canView(resource.data.event_type);
+      allow create: if validState() && request.resource.data.revision == 1;
+      allow update: if validState() && validUpdate(id)
+        && request.resource.data.event_type == resource.data.event_type
+        && request.resource.data.source_id == resource.data.source_id
+        && request.resource.data.occurrence_date == resource.data.occurrence_date;
+      allow delete: if false;
+    }
     match /photo_chunks/{id} {
       allow read: if allowed('contacts.view');
       function validPhoto() {

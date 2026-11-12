@@ -91,7 +91,7 @@
   },
   {
     "id": "notifications",
-    "label": "Notifications and drafts",
+    "label": "Calendar outcomes and drafts",
     "permissions": [
       {
         "key": "drafts.view",
@@ -99,7 +99,7 @@
       },
       {
         "key": "drafts.manage",
-        "label": "Manage drafts"
+        "label": "Manage drafts and occasion outcomes"
       }
     ]
   },

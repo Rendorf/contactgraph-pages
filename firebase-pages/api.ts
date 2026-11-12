@@ -1,5 +1,6 @@
+import { validDate, occurrenceId } from "../app/calendar-model";
 import { validateKanban } from "../app/canvas-kanban";
-import { doc, getDoc, collection, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
 import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
 import permissionModules from "./permission-catalog.json";
 import { overlay, queueDelete, queuePut, syncPending } from "./offline";
@@ -36,23 +37,24 @@ const parse = (options?: RequestInit): Json => {
   return body;
 };
 const online = () => { if (!navigator.onLine) throw new Error("Connect to the internet for this action."); };
-const readAll = async (name: string): Promise<Item[]> => {
+const readAll = async (name: string, eventType?: string): Promise<Item[]> => {
+  const liveKey = eventType ? `${name}:${eventType}` : name;
   const { db } = requireFirebase();
-  let entry = live.get(name);
+  let entry = live.get(liveKey);
   if (!entry) {
     let resolveReady!: () => void;
     let rejectReady!: (error: Error) => void;
     let initial = true;
     const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
     entry = { rows: [], ready, stop: () => {} };
-    live.set(name, entry);
+    live.set(liveKey, entry);
     const current = entry;
-    current.stop = onSnapshot(collection(db, name), (snapshot) => {
+    current.stop = onSnapshot(eventType ? query(collection(db, name), where("event_type", "==", eventType)) : collection(db, name), (snapshot) => {
       current.rows = snapshot.docs.map((item) => ({ ...item.data(), id: item.id })) as Item[];
       current.rows.forEach((item) => knownRevisions.set(cacheKey(name, item.id), Number(item.revision ?? 0)));
       if (initial) { initial = false; resolveReady(); }
       else window.dispatchEvent(new Event(name === "contacts" || name === "photo_chunks" ? "contactgraph:sync" : `contactgraph:collection:${name}`));
-    }, (cause) => { live.delete(name); rejectReady(cause); });
+    }, (cause) => { live.delete(liveKey); rejectReady(cause); });
   }
   await entry.ready;
   const rows = entry.rows.map((item) => ({ ...item }));
@@ -184,7 +186,7 @@ async function mergeContacts(body: Json): Promise<Item> {
   ids.forEach(cleanId);
   const sources = new Set(ids.filter((id) => id !== targetId));
   const { db, auth } = requireFirebase();
-  const [meetings, actions, settings, canvases, messages, photos] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "holiday_messages", "photo_chunks"].map(readAll));
+  const [meetings, actions, settings, canvases, messages, photos] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "holiday_messages", "photo_chunks"].map(name => readAll(name)));
   const related: Array<{ name: string; item: Item }> = [];
   for (const item of meetings) if ((item.contact_ids ?? [item.contact_id]).some((id: string) => sources.has(id))) related.push({ name: "meetings", item });
   for (const item of actions) if (sources.has(item.contact_id)) related.push({ name: "followup_actions", item });
@@ -260,7 +262,7 @@ async function deleteContact(id: string, expectedRevision?: number) {
   online();
   id = cleanId(id);
   const { db, auth } = requireFirebase();
-  const [meetings, actions, settings, canvases, photos] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "photo_chunks"].map(readAll));
+  const [meetings, actions, settings, canvases, photos] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "photo_chunks"].map(name => readAll(name)));
   const related: Array<{ name: string; item: Item }> = [];
   for (const item of meetings) if ((item.contact_ids ?? [item.contact_id]).includes(id)) related.push({ name: "meetings", item });
   for (const item of actions) if (item.contact_id === id) related.push({ name: "followup_actions", item });
@@ -428,6 +430,27 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
       if (method === "PUT") { const item = parse(options) as Item; if (item.id !== canvas[1] || !Array.isArray(item.nodes) || item.nodes.length > 300) throw new Error("Invalid canvas."); validateKanban(item.kanban ?? {}, item.nodes.map((node: Json) => node.id)); return response({ canvas: await put("canvases", item, false) }); }
     }
     if (path === "/api/holidays" && method === "GET") return response({ holidays: await readRows("holidays") });
+    const calendarRoute = /^\/api\/calendar-(states|drafts)\/(birthday|holiday)$/.exec(path);
+    if (calendarRoute) {
+      const [, resource, kind] = calendarRoute;
+      if (resource === "states" && method === "GET") return response({ states: (await overlay("calendar_occurrence_states", await readAll("calendar_occurrence_states", kind))).filter(item => item.event_type === kind) });
+      if (method !== "POST") return response({ error: "Unsupported method." }, 405);
+      const body = parse(options);
+      const source = await readOne(kind === "birthday" ? "contacts" : "holidays", cleanId(body.source_id));
+      if (!source) throw new Error("Occasion source no longer exists.");
+      if (resource === "states") {
+        const fields = ["id", "source_id", "occurrence_date", "status", "revision"];
+        if (Object.keys(body).length !== fields.length || fields.some(key => !(key in body)) || !/^[A-Za-z0-9_-]{1,150}$/.test(body.source_id) || !validDate(body.occurrence_date) || body.id !== occurrenceId(kind, body.source_id, body.occurrence_date) || !["open", "handled", "no_action"].includes(body.status) || !Number.isInteger(body.revision) || body.revision < 0) throw new Error("Invalid occasion outcome.");
+        const md = body.occurrence_date.slice(5);
+        if (kind === "birthday" ? String(source.birthday ?? "").slice(-5) !== md : body.occurrence_date !== source.start_date && !(source.recurrence?.some((rule: string) => rule.includes("FREQ=YEARLY")) && String(source.start_date).slice(5) === md)) throw new Error("Occurrence date does not match its source.");
+        const saved = await put("calendar_occurrence_states", { ...body, id: body.id, event_type: kind, changed_at: new Date().toISOString(), changed_by: requireFirebase().auth.currentUser!.uid }, body.revision === 0);
+        return response(saved);
+      }
+      if (Object.keys(body).some(key => !["source_id", "contact_id", "content", "language"].includes(key)) || typeof body.content !== "string" || !body.content.trim() || body.content.length > 10000 || !["Azerbaijani", "English", "Russian"].includes(body.language) || (kind === "birthday" && body.source_id !== body.contact_id)) throw new Error("Invalid draft.");
+      const contact = await readOne("contacts", cleanId(body.contact_id));
+      if (!contact) throw new Error("Contact no longer exists.");
+      return response({ saved: await saveGeneratedMessage({ holiday_id: kind === "birthday" ? "contactgraph-birthday" : body.source_id, holiday_title: kind === "birthday" ? "Birthday" : source.title, contact_id: contact.id, contact_name: contact.name, content: body.content, language: body.language, model: "manual", status: "generated", sent_at: null }) });
+    }
     if (path === "/api/holiday-messages" && method === "GET") {
       const contactId = url.searchParams.get("contact_id");
       return response({ messages: (await readRows("holiday_messages")).filter((item) => !contactId || item.contact_id === contactId).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))) });

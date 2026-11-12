@@ -14,6 +14,7 @@
     "check:firebase-permissions": "node firebase-pages/check-permissions.mjs",
     "check:firebase-source": "node firebase-pages/check-source.mjs",
     "test:firebase-rules": "firebase emulators:exec --only firestore --project demo-contactgraph --config firebase-pages/firebase.json \"node --test firebase-pages/firestore.rules.test.mjs firebase-pages/migration.test.mjs\"",
+    "test:calendar": "node --test firebase-pages/calendar.test.mjs",
     "test:search": "node --test firebase-pages/search.test.mjs",
     "test:canvas-kanban": "node --test firebase-pages/canvas-kanban.test.mjs",
     "test:firebase-quota": "node --test firebase-pages/quota.test.mjs",
