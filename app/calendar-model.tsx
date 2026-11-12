@@ -36,3 +36,27 @@ export function calendarEvents(contacts: CalendarContact[], holidays: CalendarHo
 }
 export function needsAttention(event: CalendarEvent, today: string) { return event.status === 'open' && (event.type === 'followup' ? event.date <= today : event.date <= today && event.end > today); }
 export const attentionCount = (events: CalendarEvent[], today: string) => new Set(events.filter(e => needsAttention(e, today)).map(e => e.id)).size;
+
+/** Calendar months, clamped at month end (Feb 29 → Feb 28 next year). */
+export function addMonths(day: string, count: number) {
+  const date = new Date(`${day}T00:00:00Z`);
+  const wantedDay = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + count);
+  const last = new Date(date);
+  last.setUTCMonth(last.getUTCMonth() + 1);
+  last.setUTCDate(0);
+  date.setUTCDate(Math.min(wantedDay, last.getUTCDate()));
+  return date.toISOString().slice(0, 10);
+}
+export function calendarWindowEvents(contacts: CalendarContact[], holidays: CalendarHoliday[], followups: FollowupData, states: OccurrenceState[], today: string, month: string) {
+  const monthStart = `${month.slice(0, 7)}-01`;
+  const upcoming = calendarEvents(contacts, holidays, followups, states, today, addMonths(today, 12));
+  // Include adjacent dates shown in the month grid without tying upcoming to navigation.
+  const visible = calendarEvents(contacts, holidays, followups, states, addDays(monthStart, -7), addDays(addMonths(monthStart, 1), 7));
+  return [...new Map([...upcoming, ...visible].map(event => [event.id, event])).values()].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+}
+export function upcomingEvents(events: CalendarEvent[], today: string, type = 'all') {
+  const end = addMonths(today, 12);
+  return events.filter(event => (type === 'all' || event.type === type) && event.end > today && event.date <= end);
+}

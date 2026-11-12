@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 const source = readFileSync(new URL('../app/calendar-model.tsx', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { calendarEvents, attentionCount, todayInBaku, validDate } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const { calendarEvents, attentionCount, todayInBaku, validDate, calendarWindowEvents, upcomingEvents, addMonths } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 const empty = { actions: [], suggestions: [] };
 test('Baku midnight, leap days and yearless birthdays', () => {
   assert.equal(todayInBaku(new Date('2026-11-11T20:00:00Z')), '2026-11-12');
@@ -37,4 +37,29 @@ test('explicit year holidays do not recur and malformed dates cannot roll over',
   const h = [{ id: 'h', title: 'Holiday', start_date: '2026-11-12', end_date: '2026-11-13', recurrence: [] }];
   assert.equal(calendarEvents([], h, empty, [], '2027-01-01', '2027-12-31').length, 0);
   assert.equal(validDate('2026-04-31'), false);
+});
+
+test('upcoming spans year boundaries independently of the displayed month', () => {
+  const people = [{ id: 'a', name: 'A', birthday: '--01-05' }];
+  const holidays = [{ id: 'h', title: 'Holiday', start_date: '2026-01-02', end_date: '2026-01-03', recurrence: ['RRULE:FREQ=YEARLY'] }];
+  const december = calendarWindowEvents(people, holidays, empty, [], '2026-12-20', '2026-12-01');
+  const historical = calendarWindowEvents(people, holidays, empty, [], '2026-12-20', '2020-07-01');
+  assert.deepEqual(upcomingEvents(december, '2026-12-20'), upcomingEvents(historical, '2026-12-20'));
+  assert.deepEqual(upcomingEvents(december, '2026-12-20').map(e => e.date), ['2027-01-02', '2027-01-05']);
+  assert.equal(upcomingEvents(december, '2026-12-20', 'birthday').length, 1);
+  assert.equal(upcomingEvents(december, '2026-12-20', 'holiday').length, 1);
+});
+test('overlapping windows deduplicate events; overdue and out-of-range items stay out of upcoming', () => {
+  const followups = { actions: [{ id: 'late', contact_id: 'a', title: 'Late', due_date: '2026-11-11' }, { id: 'future', contact_id: 'a', title: 'Future', due_date: '2030-01-01' }], suggestions: [] };
+  const events = calendarWindowEvents([{ id: 'a', name: 'A', birthday: '--11-12' }], [], followups, [], '2026-11-12', '2030-01-01');
+  assert.equal(events.filter(e => e.id === 'action:late').length, 1);
+  assert.equal(events.filter(e => e.id === 'birthday:a:2026-11-12').length, 1);
+  assert.ok(upcomingEvents(events, '2026-11-12').every(e => e.type === 'birthday'));
+});
+test('rolling twelve-month bounds clamp leap-day and include ongoing multi-day occasions', () => {
+  assert.equal(addMonths('2028-02-29', 12), '2029-02-28');
+  const h = [{ id: 'h', title: 'Holiday', start_date: '2026-12-31', end_date: '2027-01-03', recurrence: [] }];
+  const events = calendarWindowEvents([], h, empty, [], '2027-01-01', '2027-01-01');
+  assert.equal(upcomingEvents(events, '2027-01-01').length, 1);
+  assert.equal(upcomingEvents(events, '2027-01-03').length, 0);
 });

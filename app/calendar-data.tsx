@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './auth-context';
-import { calendarEvents, todayInBaku, type CalendarContact, type FollowupData, type OccurrenceState } from './calendar-model';
+import { calendarWindowEvents, todayInBaku, type CalendarContact, type FollowupData, type OccurrenceState } from './calendar-model';
 import type { Holiday } from './holiday-module';
 const collections = ['holidays', 'calendar_occurrence_states', 'followup_actions', 'followup_settings', 'contacts', 'meetings'];
 export function useCalendarData(contacts: CalendarContact[], month?: string) {
@@ -40,11 +40,7 @@ export function useCalendarData(contacts: CalendarContact[], month?: string) {
     const timer = window.setInterval(listener, 60000);
     return () => { sequence.current++; window.clearInterval(timer); events.forEach(name => window.removeEventListener(name, listener)); };
   }, [refresh]);
-  const year = Number((month || today).slice(0, 4));
-  const events = useMemo(() => {
-    const make = (y: number) => calendarEvents(birthdays ? contacts : [], holidays, followups, states, `${y}-01-01`, `${y}-12-31`);
-    return [...new Map([...make(year), ...make(Number(today.slice(0, 4)))].map(e => [e.id, e])).values()].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
-  }, [birthdays, contacts, holidays, followups, states, year, today]);
+  const events = useMemo(() => calendarWindowEvents(birthdays ? contacts : [], holidays, followups, states, today, month || today), [birthdays, contacts, holidays, followups, states, month, today]);
   return { today, events, holidays, states, loading, error, refresh };
 }
 export type CalendarData = ReturnType<typeof useCalendarData>;
