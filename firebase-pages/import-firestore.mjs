@@ -14,8 +14,10 @@ const resume = process.argv.includes("--resume");
 const input = path.resolve(args.input ?? "");
 if (!args.input || input.startsWith(`${appRoot}${path.sep}`) || !fs.existsSync(input)) throw new Error("Pass --input with a private export JSON outside the source repository.");
 const data = JSON.parse(fs.readFileSync(input, "utf8"));
-const required = ["contacts", "holidays", "holiday_messages", "canvases", "meetings", "followup_actions", "followup_settings", "calendar_occurrence_states", "roles", "members", "osint_settings", "osint_monitors", "osint_feeds", "osint_items", "osint_runs", "osint_candidates", "osint_provider_findings"];
-data.calendar_occurrence_states ??= [];
+// Shared with the three-way sync and the backup tool. photo_chunks are built below from photo files.
+const registry = JSON.parse(fs.readFileSync(new URL("./sync-collections.json", import.meta.url), "utf8"));
+const required = [...registry.synced.map((entry) => entry.name), ...registry.firestore_only.filter((name) => name !== "photo_chunks")];
+for (const entry of registry.synced) if (entry.optional) data[entry.name] ??= [];
 for (const key of required) if (!Array.isArray(data[key])) throw new Error(`Missing migration array: ${key}`);
 const ownerEmail = args["owner-email"]?.toLowerCase();
 const members = data.members.map((member) => ({ ...member, email: member.role_id === "owner" && ownerEmail ? ownerEmail : member.email }));

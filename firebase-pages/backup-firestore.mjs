@@ -15,7 +15,13 @@ const output = path.resolve(arg("file") || "");
 const passphrase = process.env.CONTACTGRAPH_BACKUP_PASSPHRASE;
 if ((mode !== "self-test" && !arg("file")) || (arg("file") && output.startsWith(`${appRoot}${path.sep}`))) throw new Error("Choose a backup file outside the public source repository.");
 if (!passphrase || passphrase.length < 20) throw new Error("Set CONTACTGRAPH_BACKUP_PASSPHRASE to a private passphrase of at least 20 characters.");
-const collections = ["contacts", "holidays", "holiday_messages", "canvases", "meetings", "followup_actions", "followup_settings", "calendar_occurrence_states", "roles", "members", "photo_chunks", "osint_settings", "osint_monitors", "osint_feeds", "osint_items", "osint_runs", "osint_candidates", "osint_provider_findings"];
+// Shared with the three-way sync: a collection missing here would be lost on restore
+// and then deleted everywhere by the next sync.
+const registry = JSON.parse(fs.readFileSync(new URL("./sync-collections.json", import.meta.url), "utf8"));
+const collections = [...registry.synced.map((entry) => entry.name), ...registry.firestore_only];
+const optional = new Set(registry.synced.filter((entry) => entry.optional).map((entry) => entry.name));
+// Backups written before an optional collection existed simply lack it.
+const rowsOf = (payload, name) => payload.collections[name] ?? [];
 const aad = Buffer.from("ContactGraph Firestore backup v1");
 
 function decrypt(file) {
@@ -27,7 +33,7 @@ function decrypt(file) {
   decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
   const plaintext = Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]);
   const payload = JSON.parse(plaintext.toString("utf8"));
-  if (payload.version !== 1 || !collections.every((name) => Array.isArray(payload.collections[name]))) throw new Error("Backup contents are invalid.");
+  if (payload.version !== 1 || !collections.every((name) => Array.isArray(payload.collections[name]) || (optional.has(name) && payload.collections[name] === undefined))) throw new Error("Backup contents are invalid.");
   return payload;
 }
 function encrypt(payload) {
@@ -56,7 +62,7 @@ if (mode === "self-test") {
   } finally { fs.rmSync(file, { force: true }); }
 } else if (mode === "verify") {
   const payload = decrypt(output);
-  console.log(JSON.stringify({ verified: true, created_at: payload.created_at, counts: Object.fromEntries(collections.map((name) => [name, payload.collections[name].length])) }));
+  console.log(JSON.stringify({ verified: true, created_at: payload.created_at, counts: Object.fromEntries(collections.map((name) => [name, rowsOf(payload, name).length])) }));
 } else if (mode === "export") {
   const projectId = arg("project");
   if (!projectId) throw new Error("Pass --project with the Firebase project ID.");
@@ -71,7 +77,7 @@ if (mode === "self-test") {
   const envelope = encrypt(payload);
   fs.writeFileSync(output, JSON.stringify(envelope), { flag: "wx", mode: 0o600 });
   const verified = decrypt(output);
-  console.log(JSON.stringify({ verified: true, created_at: verified.created_at, counts: Object.fromEntries(collections.map((name) => [name, verified.collections[name].length])) }));
+  console.log(JSON.stringify({ verified: true, created_at: verified.created_at, counts: Object.fromEntries(collections.map((name) => [name, rowsOf(verified, name).length])) }));
 } else if (mode === "restore") {
   const projectId = arg("project");
   if (!projectId) throw new Error("Pass --project with an empty target Firebase project ID.");
@@ -80,7 +86,7 @@ if (mode === "self-test") {
   const db = getFirestore();
   for (const name of collections) if (!(await db.collection(name).limit(1).get()).empty) throw new Error(`Target ${name} is not empty; restore stopped before writing.`);
   for (const name of collections) {
-    const rows = payload.collections[name];
+    const rows = rowsOf(payload, name);
     for (let offset = 0; offset < rows.length;) {
       const part = [];
       let bytes = 0;
@@ -100,7 +106,7 @@ if (mode === "self-test") {
   }
   for (const name of collections) {
     const count = (await db.collection(name).count().get()).data().count;
-    if (count !== payload.collections[name].length) throw new Error(`Restore count mismatch for ${name}.`);
+    if (count !== rowsOf(payload, name).length) throw new Error(`Restore count mismatch for ${name}.`);
   }
   console.log(JSON.stringify({ restored: true, source_project: payload.project_id, target_project: projectId }));
 } else throw new Error("Choose --mode export, verify, restore, or self-test.");

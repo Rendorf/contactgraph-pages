@@ -170,4 +170,14 @@ test('calendar outcomes enforce source permissions, identity, dates and revision
   await assertSucceeds(owner.doc(`calendar_occurrence_states/${holiday.id}`).set(holiday));
   await assertFails(editor.doc(`calendar_occurrence_states/${holiday.id}`).get());
   await assertFails(env.unauthenticatedContext().firestore().doc(`calendar_occurrence_states/${item.id}`).get());
+  // Birthday outcomes go only together with their contact (2026-11-17).
+  const editorBatch = editor.batch();
+  editorBatch.delete(editor.doc('contacts/calendar-person'));
+  editorBatch.delete(editor.doc(`calendar_occurrence_states/${item.id}`));
+  await assertFails(editorBatch.commit());
+  await assertFails(owner.doc(`calendar_occurrence_states/${holiday.id}`).delete());
+  const ownerBatch = owner.batch();
+  ownerBatch.delete(owner.doc('contacts/calendar-person'));
+  ownerBatch.delete(ref);
+  await assertSucceeds(ownerBatch.commit());
 });

@@ -51,6 +51,12 @@ def export(database: Path, output: Path, osint_database: Path | None = None) -> 
                  for row in connection.execute(
                      "SELECT sequence, holiday_id, variant, language, content, model, created_at::VARCHAR FROM holiday_posts ORDER BY sequence"
                  ).fetchall()]
+        for post in posts:
+            # Same content-derived sync ID as three_way_core.normalize (tested), so the
+            # Firestore importer and restore keep posts under the IDs the sync expects.
+            identity = json.dumps([post[field] for field in ("holiday_id", "variant", "language", "content", "model", "created_at")],
+                                  ensure_ascii=False, separators=(",", ":"))
+            post["id"] = "hp-" + hashlib.sha256(identity.encode()).hexdigest()[:40]
         data = {
             "contacts": list_contacts(connection),
             "holidays": list_holidays(connection),

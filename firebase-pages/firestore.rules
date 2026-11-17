@@ -198,7 +198,9 @@ service cloud.firestore {
         && request.resource.data.event_type == resource.data.event_type
         && request.resource.data.source_id == resource.data.source_id
         && request.resource.data.occurrence_date == resource.data.occurrence_date;
-      allow delete: if false;
+      // Only together with the contact it belongs to (delete or merge in the same write).
+      allow delete: if resource.data.event_type == 'birthday' && allowed('contacts.delete')
+        && !existsAfter(/databases/$(database)/documents/contacts/$(resource.data.source_id));
     }
     match /photo_chunks/{id} {
       allow read: if allowed('contacts.view');

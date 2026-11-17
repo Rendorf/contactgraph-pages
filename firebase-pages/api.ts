@@ -1,6 +1,6 @@
 import { validDate, occurrenceId } from "../app/calendar-model";
 import { validateKanban } from "../app/canvas-kanban";
-import { doc, getDoc, collection, query, where, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
 import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
 import permissionModules from "./permission-catalog.json";
 import { overlay, queueDelete, queuePut, syncPending } from "./offline";
@@ -178,6 +178,12 @@ async function batchContacts(ids: string[], transform: (item: Item) => Item | nu
   refreshContacts();
   return changed;
 }
+// Birthday outcomes embed the contact ID and birthday, so they are removed with the contact.
+async function birthdayStates(contactIds: string[]): Promise<Item[]> {
+  const { db } = requireFirebase();
+  const snapshots = await Promise.all(contactIds.map((id) => getDocs(query(collection(db, "calendar_occurrence_states"), where("event_type", "==", "birthday"), where("source_id", "==", id)))));
+  return snapshots.flatMap((snapshot) => snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Item));
+}
 async function mergeContacts(body: Json): Promise<Item> {
   online();
   const ids = body.source_ids;
@@ -194,6 +200,7 @@ async function mergeContacts(body: Json): Promise<Item> {
   for (const item of canvases) if (item.nodes?.some((node: Json) => node.contact_ids?.some((id: string) => sources.has(id)))) related.push({ name: "canvases", item });
   for (const item of messages) if (sources.has(item.contact_id)) related.push({ name: "holiday_messages", item });
   for (const item of photos) if (sources.has(item.contact_id) || item.contact_id === targetId) related.push({ name: "photo_chunks", item });
+  for (const item of await birthdayStates([...sources])) related.push({ name: "calendar_occurrence_states", item });
   if (related.length + ids.length > 220) throw new Error("This merge has too many linked records for one atomic operation. Review it in the local app.");
   const contactRefs = ids.map((id: string) => doc(db, "contacts", id));
   const relatedRefs = related.map(({ name, item }) => doc(db, name, item.id));
@@ -233,6 +240,8 @@ async function mergeContacts(body: Json): Promise<Item> {
       } else if (name === "followup_settings") {
         tx.delete(ref);
         if (!targetSettings.exists()) tx.set(targetSettingsRef, { ...value, id: targetId, revision: 1, updated_at: updatedAt, updated_by: updatedBy });
+      } else if (name === "calendar_occurrence_states") {
+        tx.delete(ref);
       }
     }
     if (photoOwner !== targetId) {
@@ -269,6 +278,7 @@ async function deleteContact(id: string, expectedRevision?: number) {
   for (const item of settings) if (item.id === id) related.push({ name: "followup_settings", item });
   for (const item of canvases) if (item.nodes?.some((node: Json) => node.contact_ids?.includes(id))) related.push({ name: "canvases", item });
   for (const item of photos) if (item.contact_id === id) related.push({ name: "photo_chunks", item });
+  for (const item of await birthdayStates([id])) related.push({ name: "calendar_occurrence_states", item });
   if (related.length > 180) throw new Error("This contact has too many linked records to delete atomically. Review it in the local app.");
   const ref = doc(db, "contacts", id);
   const linkedRefs = related.map((row) => doc(db, row.name, row.item.id));

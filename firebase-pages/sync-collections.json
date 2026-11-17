@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "description": "Single list of ContactGraph collections. Read by the three-way sync (Python and Node), the Firestore backup/restore tool and the Firestore importer. A drift test fails if any tool keeps its own list.",
+  "synced": [
+    { "name": "contacts" },
+    { "name": "holidays" },
+    { "name": "holiday_messages" },
+    { "name": "holiday_posts", "optional": true },
+    { "name": "canvases" },
+    { "name": "meetings" },
+    { "name": "followup_actions" },
+    { "name": "followup_settings" },
+    { "name": "calendar_occurrence_states", "optional": true },
+    { "name": "osint_settings" },
+    { "name": "osint_monitors" },
+    { "name": "osint_feeds" },
+    { "name": "osint_items" },
+    { "name": "osint_runs" },
+    { "name": "osint_candidates" },
+    { "name": "osint_provider_findings" }
+  ],
+  "firestore_only": ["roles", "members", "photo_chunks"],
+  "notes": {
+    "optional": "Added after older backups and baselines were written. Missing in an old backup or baseline means empty; missing in a live snapshot is an error.",
+    "firestore_only": "roles and members are independent per deployment by design; photo_chunks are reconciled separately against verified photo files."
+  }
+}
