@@ -181,3 +181,38 @@ test('calendar outcomes enforce source permissions, identity, dates and revision
   ownerBatch.delete(ref);
   await assertSucceeds(ownerBatch.commit());
 });
+
+test("connections need their own permission, a canonical pair and both contacts", async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    for (const id of ["link-a", "link-b", "link-c"]) await db.doc(`contacts/${id}`).set({ id, name: id, revision: 1, updated_at: "2026-11-18T00:00:00Z", updated_by: "migration", labels: [] });
+    await db.doc("members/link-viewer@example.com").set({ role_id: "link-viewer", active: true });
+    await db.doc("roles/link-viewer").set({ permissions: ["contacts.view", "connections.view"] });
+  });
+  const viewer = google("link-viewer@example.com", "link-viewer-uid");
+  const id = (n) => `cl-${String(n).repeat(40)}`;
+  const link = (contact_a, contact_b, extra = {}) => ({ id: id(1), contact_a, contact_b, note: "", revision: 1, updated_at: "2026-11-18T00:00:00Z", updated_by: "owner-uid", ...extra });
+  const ref = owner.doc(`contact_links/${id(1)}`);
+  await assertFails(ref.set(link("link-b", "link-a")));
+  await assertFails(ref.set(link("link-a", "link-a")));
+  await assertFails(ref.set(link("link-a", "missing-person")));
+  await assertFails(ref.set(link("link-a", "link-b", { note: "x".repeat(501) })));
+  await assertFails(ref.set(link("link-a", "link-b", { extra: true })));
+  await assertFails(owner.doc("contact_links/not-a-link").set({ ...link("link-a", "link-b"), id: "not-a-link" }));
+  await assertFails(viewer.doc(`contact_links/${id(1)}`).set(link("link-a", "link-b", { updated_by: "link-viewer-uid" })));
+  await assertFails(assistant.doc(`contact_links/${id(1)}`).set(link("link-a", "link-b", { updated_by: "assistant-uid" })));
+  await assertSucceeds(ref.set(link("link-a", "link-b", { note: "Met at a conference" })));
+  await assertSucceeds(viewer.doc(`contact_links/${id(1)}`).get());
+  await assertFails(assistant.doc(`contact_links/${id(1)}`).get());
+  await assertFails(ref.set(link("link-a", "link-c", { revision: 2 })));
+  await assertSucceeds(ref.set(link("link-a", "link-b", { note: "Updated", revision: 2 })));
+  await assertFails(viewer.doc(`contact_links/${id(1)}`).delete());
+  // A contact and its connections can be deleted together by someone who may delete contacts.
+  const second = owner.doc(`contact_links/${id(2)}`);
+  await assertSucceeds(second.set({ ...link("link-b", "link-c"), id: id(2) }));
+  const batch = owner.batch();
+  batch.delete(owner.doc("contacts/link-c"));
+  batch.delete(second);
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(ref.delete());
+});

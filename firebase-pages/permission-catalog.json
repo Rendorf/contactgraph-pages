@@ -128,6 +128,20 @@
     ]
   },
   {
+    "id": "connections",
+    "label": "Connections",
+    "permissions": [
+      {
+        "key": "connections.view",
+        "label": "View connections between people"
+      },
+      {
+        "key": "connections.manage",
+        "label": "Add, edit and remove connections"
+      }
+    ]
+  },
+  {
     "id": "canva",
     "label": "Canvas",
     "permissions": [

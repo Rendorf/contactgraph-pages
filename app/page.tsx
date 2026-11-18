@@ -20,6 +20,7 @@ import { ContactOsintHistory } from "./contact-osint-history";
 import { BirthdayMessageComposer } from "./birthday-module";
 import { DuplicatesModule } from "./duplicates-module";
 import { ContactMeetingHistory, MeetingsModule } from "./meetings-module";
+import { ContactConnections } from "./contact-connections";
 import { FollowupsModule } from "./followups-module";
 import { ContactFollowupReminders } from "./contact-followup-reminders";
 import { OfflineStatus } from "./offline-status";
@@ -123,7 +124,7 @@ const mergeContactDraft = (contacts: Contact[], targetId: string): Contact => {
   return base;
 };
 
-function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggestions, open, onOpenChange, onSave, onDelete, onMerge, isNew = false }: {
+function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggestions, open, onOpenChange, onSave, onDelete, onMerge, onOpenContact, isNew = false }: {
   contact: Contact | null;
   contacts: Contact[];
   tagSuggestions: string[];
@@ -133,6 +134,7 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
   onSave: (contact: Contact) => Promise<void>;
   onDelete: (contact: Contact) => Promise<void>;
   onMerge: (contact: Contact) => void;
+  onOpenContact?: (contactId: string) => void;
   isNew?: boolean;
 }) {
   const { can, offline } = useAuth();
@@ -233,6 +235,7 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
           </div>
           {!isNew && can("followups.view") && <section className="editor-section"><div className="contact-history-heading"><h3>Follow-up reminders</h3><span>Choose when this contact should appear in Follow-ups</span></div><ContactFollowupReminders contactId={draft.id} /></section>}
           {!isNew && can("meetings.view") && <section className="editor-section"><div className="contact-history-heading"><h3>Meeting notes</h3><span>Add a dated note or review past meetings</span></div><ContactMeetingHistory contactId={draft.id} contacts={contacts} /></section>}
+          {!isNew && can("connections.view") && can("contacts.view") && <section className="editor-section"><div className="contact-history-heading"><h3>Connections</h3><span>People this contact knows, shown in Graph view → People</span></div><ContactConnections contactId={draft.id} contacts={contacts} onOpenContact={onOpenContact} /></section>}
           {!offline && !isNew && can("osint.view") && <ContactOsintHistory contactId={draft.id} open={open} />}
           {!isNew && (draft.positions?.length ?? 0) > 0 && <section className="editor-section"><h3>Confirmed position history</h3><div className="mt-3 space-y-3">{draft.positions?.map(position => <div key={position.id} className="rounded-lg border bg-white p-3 text-sm"><strong>{position.title}</strong><span className="ml-2 text-[#647985]">{position.organization}</span><small className="mt-1 block text-[#71858f]">{position.period} · confirmed {new Date(position.confirmed_at).toLocaleDateString()}</small><a className="mt-1 block text-[#12646a] underline" href={position.source_url} target="_blank" rel="noopener noreferrer">Source</a></div>)}</div></section>}
           {(can("contacts.edit") || (isNew && can("contacts.create"))) && <section className="editor-section">
@@ -933,7 +936,7 @@ export default function Home() {
         <AlertDialogFooter><AlertDialogCancel disabled={bulkSaving}>Cancel</AlertDialogCancel><AlertDialogAction variant={bulkAction === "delete" ? "destructive" : "default"} disabled={bulkSaving || (bulkAction !== "delete" && !bulkTag.trim())} onClick={(event) => { event.preventDefault(); void applyBulkAction(); }}>{bulkSaving ? "Applying…" : bulkAction === "delete" ? "Delete contacts" : bulkAction === "add-tag" ? "Add tag" : "Remove tag"}</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    <ContactEditor key={`${editorContact?.id ?? "no-contact"}:${editorOpen}`} contact={editorContact} contacts={contacts} tagSuggestions={tagCounts.map(([tag]) => tag)} organizationSuggestions={organizationSuggestions} open={editorOpen} onOpenChange={setEditorOpen} onSave={saveContact} onDelete={deleteContact} onMerge={openContactMergePicker} isNew={editorIsNew} />
+    <ContactEditor key={`${editorContact?.id ?? "no-contact"}:${editorOpen}`} contact={editorContact} contacts={contacts} tagSuggestions={tagCounts.map(([tag]) => tag)} organizationSuggestions={organizationSuggestions} open={editorOpen} onOpenChange={setEditorOpen} onSave={saveContact} onDelete={deleteContact} onMerge={openContactMergePicker} onOpenContact={openContactById} isNew={editorIsNew} />
     <TagMergeDialog tags={selectedTags} open={tagMergeOpen} onOpenChange={setTagMergeOpen} onMerge={mergeTags} />
     <Dialog open={mergePickerOpen} onOpenChange={(open) => { setMergePickerOpen(open); if (!open) setMergePickerContact(null); }}>
       <DialogContent className="flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden p-0 sm:max-w-xl">

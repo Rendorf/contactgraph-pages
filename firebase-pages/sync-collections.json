@@ -11,6 +11,7 @@
     { "name": "followup_actions" },
     { "name": "followup_settings" },
     { "name": "calendar_occurrence_states", "optional": true },
+    { "name": "contact_links", "optional": true },
     { "name": "osint_settings" },
     { "name": "osint_monitors" },
     { "name": "osint_feeds" },

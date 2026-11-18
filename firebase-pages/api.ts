@@ -184,6 +184,53 @@ async function birthdayStates(contactIds: string[]): Promise<Item[]> {
   const snapshots = await Promise.all(contactIds.map((id) => getDocs(query(collection(db, "calendar_occurrence_states"), where("event_type", "==", "birthday"), where("source_id", "==", id)))));
   return snapshots.flatMap((snapshot) => snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Item));
 }
+// Connections: one mutual record per pair. The ID matches scripts/contact_links.py link_id.
+const LINK_CONTACT = /^[A-Za-z0-9_-]{1,200}$/;
+const LINK_NOTE_LIMIT = 500;
+const linkPair = (first: string, second: string): [string, string] => {
+  if (!LINK_CONTACT.test(first) || !LINK_CONTACT.test(second)) throw new Error("Invalid contact.");
+  if (first === second) throw new Error("A contact cannot be connected to itself.");
+  return first < second ? [first, second] : [second, first];
+};
+async function linkId(first: string, second: string) {
+  const [a, b] = linkPair(first, second);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${a}\n${b}`)));
+  return "cl-" + [...digest].map((value) => value.toString(16).padStart(2, "0")).join("").slice(0, 40);
+}
+const linkNote = (value: unknown) => {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string" || value.includes("\u0000")) throw new Error("Invalid connection note.");
+  const note = value.trim();
+  if (note.length > LINK_NOTE_LIMIT) throw new Error(`Connection notes are limited to ${LINK_NOTE_LIMIT} characters.`);
+  return note;
+};
+const joinNotes = (first: string, second: string) => !second || second === first ? first : !first ? second : `${first}; ${second}`.slice(0, LINK_NOTE_LIMIT);
+// Scoped queries, so deleting or merging a contact does not need the whole collection.
+async function linksOf(contactIds: string[]): Promise<Item[]> {
+  const { db } = requireFirebase();
+  const snapshots = await Promise.all(contactIds.flatMap((id) => ["contact_a", "contact_b"].map((field) => getDocs(query(collection(db, "contact_links"), where(field, "==", id))))));
+  const rows = new Map<string, Item>();
+  for (const snapshot of snapshots) for (const item of snapshot.docs) rows.set(item.id, { ...item.data(), id: item.id } as Item);
+  return [...rows.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+async function createLinks(body: Json) {
+  const contactId = body.contact_id;
+  const others = body.contact_ids;
+  if (typeof contactId !== "string" || !Array.isArray(others) || !others.length || others.length > 100 || others.some((id) => typeof id !== "string")) throw new Error("Choose 1 to 100 people to connect.");
+  if (others.includes(contactId)) throw new Error("A contact cannot be connected to itself.");
+  const note = linkNote(body.note);
+  const existing = new Set((await readRows("contact_links")).map((item) => item.id));
+  const links: Item[] = [];
+  let skipped = 0;
+  for (const other of [...new Set(others as string[])]) {
+    const [contact_a, contact_b] = linkPair(contactId, other);
+    const id = await linkId(contact_a, contact_b);
+    if (existing.has(id)) { skipped++; continue; }
+    links.push(await put("contact_links", { id, contact_a, contact_b, note }, true) as Item);
+    existing.add(id);
+  }
+  return { links, skipped };
+}
 async function mergeContacts(body: Json): Promise<Item> {
   online();
   const ids = body.source_ids;
@@ -201,7 +248,24 @@ async function mergeContacts(body: Json): Promise<Item> {
   for (const item of messages) if (sources.has(item.contact_id)) related.push({ name: "holiday_messages", item });
   for (const item of photos) if (sources.has(item.contact_id) || item.contact_id === targetId) related.push({ name: "photo_chunks", item });
   for (const item of await birthdayStates([...sources])) related.push({ name: "calendar_occurrence_states", item });
-  if (related.length + ids.length > 220) throw new Error("This merge has too many linked records for one atomic operation. Review it in the local app.");
+  // Connections move to the surviving contact (same rules as contact_links.remap_contact_links).
+  const links = await linksOf(ids);
+  const sourceLinks = links.filter((item) => sources.has(item.contact_a) || sources.has(item.contact_b));
+  const targetLinks = new Map(links.filter((item) => !sourceLinks.includes(item)).map((item) => [item.id, item]));
+  const plannedLinks = new Map<string, { contact_a: string; contact_b: string; note: string; base?: Item }>();
+  for (const item of sourceLinks) {
+    related.push({ name: "contact_links", item });
+    const a = sources.has(item.contact_a) ? targetId : item.contact_a;
+    const b = sources.has(item.contact_b) ? targetId : item.contact_b;
+    if (a === b) continue;
+    const [contact_a, contact_b] = linkPair(a, b);
+    const id = await linkId(contact_a, contact_b);
+    const base = targetLinks.get(id);
+    const prior = plannedLinks.get(id) ?? (base ? { contact_a, contact_b, note: String(base.note ?? ""), base } : undefined);
+    plannedLinks.set(id, { contact_a, contact_b, note: prior ? joinNotes(prior.note, String(item.note ?? "")) : String(item.note ?? ""), base: prior?.base });
+  }
+  const linkWrites = [...plannedLinks.entries()].map(([id, plan]) => ({ id, ...plan, ref: doc(db, "contact_links", id) }));
+  if (related.length + linkWrites.length + ids.length > 220) throw new Error("This merge has too many linked records for one atomic operation. Review it in the local app.");
   const contactRefs = ids.map((id: string) => doc(db, "contacts", id));
   const relatedRefs = related.map(({ name, item }) => doc(db, name, item.id));
   const targetSettingsRef = doc(db, "followup_settings", targetId);
@@ -211,12 +275,14 @@ async function mergeContacts(body: Json): Promise<Item> {
       Promise.all(relatedRefs.map((ref) => tx.get(ref))),
       tx.get(targetSettingsRef),
     ]);
+    const linkSnaps = await Promise.all(linkWrites.map((item) => tx.get(item.ref)));
     if (contactSnaps.some((snapshot) => !snapshot.exists())) throw new Error("A selected contact changed or was deleted. Refresh first.");
     const current = new Map(contactSnaps.map((snapshot) => [snapshot.id, snapshot.data()!]));
     for (const expected of body.expected_contacts ?? []) if (Number(expected?.revision ?? 0) !== Number(current.get(expected?.id)?.revision ?? -1)) throw new Error("A duplicate changed on another device. Refresh first.");
     const oldTarget = current.get(targetId)!;
     if (Number(body.contact.revision ?? 0) !== Number(oldTarget.revision ?? 0)) throw new Error("The surviving contact changed on another device. Refresh first.");
     if (relatedSnaps.some((snapshot) => !snapshot.exists())) throw new Error("Linked data changed on another device. Refresh first.");
+    if (linkWrites.some((item, index) => linkSnaps[index].exists() !== Boolean(item.base) || (item.base && Number(linkSnaps[index].data()?.revision ?? 0) !== Number(item.base.revision ?? 0)))) throw new Error("Connections changed on another device. Refresh first.");
     const updatedAt = new Date().toISOString();
     const updatedBy = auth.currentUser?.uid ?? "";
     const { photo_url: _photoUrl, ...persisted } = body.contact;
@@ -240,9 +306,13 @@ async function mergeContacts(body: Json): Promise<Item> {
       } else if (name === "followup_settings") {
         tx.delete(ref);
         if (!targetSettings.exists()) tx.set(targetSettingsRef, { ...value, id: targetId, revision: 1, updated_at: updatedAt, updated_by: updatedBy });
-      } else if (name === "calendar_occurrence_states") {
+      } else if (name === "calendar_occurrence_states" || name === "contact_links") {
         tx.delete(ref);
       }
+    }
+    for (const item of linkWrites) {
+      const revision = item.base ? Number(item.base.revision ?? 0) + 1 : 1;
+      tx.set(item.ref, { id: item.id, contact_a: item.contact_a, contact_b: item.contact_b, note: item.note, revision, updated_at: updatedAt, updated_by: updatedBy });
     }
     if (photoOwner !== targetId) {
       const chosen = existingPhoto.filter((row) => row.item.contact_id === photoOwner);
@@ -279,6 +349,7 @@ async function deleteContact(id: string, expectedRevision?: number) {
   for (const item of canvases) if (item.nodes?.some((node: Json) => node.contact_ids?.includes(id))) related.push({ name: "canvases", item });
   for (const item of photos) if (item.contact_id === id) related.push({ name: "photo_chunks", item });
   for (const item of await birthdayStates([id])) related.push({ name: "calendar_occurrence_states", item });
+  for (const item of await linksOf([id])) related.push({ name: "contact_links", item });
   if (related.length > 180) throw new Error("This contact has too many linked records to delete atomically. Review it in the local app.");
   const ref = doc(db, "contacts", id);
   const linkedRefs = related.map((row) => doc(db, row.name, row.item.id));
@@ -427,6 +498,20 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
       return response({ meetings: (await readRows("meetings")).filter((item) => !contactId || item.contact_id === contactId || item.contact_ids?.includes(contactId)).sort((a, b) => String(b.date).localeCompare(String(a.date))) });
     }
     if (path === "/api/meetings" && method === "POST") { const item = parse(options) as Item; item.id ||= crypto.randomUUID(); if (!Array.isArray(item.contact_ids) || !item.contact_ids.length || typeof item.insights !== "string" || !item.insights.trim()) throw new Error("Choose a contact and add meeting notes."); return response({ meeting: await put("meetings", item, true) }); }
+    if (path === "/api/contact-links" && method === "GET") {
+      const contactId = url.searchParams.get("contact_id");
+      return response({ links: (await readRows("contact_links")).filter((item) => !contactId || item.contact_a === contactId || item.contact_b === contactId).sort((a, b) => a.id.localeCompare(b.id)) });
+    }
+    if (path === "/api/contact-links" && method === "POST") return response(await createLinks(parse(options)), 201);
+    const link = /^\/api\/contact-links\/([^/]+)$/.exec(path);
+    if (link && method === "DELETE") { await remove("contact_links", link[1]); return response({ id: link[1], deleted: true }); }
+    if (link && method === "PUT") {
+      const body = parse(options);
+      if (body.id !== link[1]) throw new Error("Connection id does not match.");
+      const existing = (await readRows("contact_links")).find((item) => item.id === link[1]);
+      if (!existing) throw new Error("Connection not found. Refresh and try again.");
+      return response({ link: await put("contact_links", { ...existing, note: linkNote(body.note), revision: body.revision ?? existing.revision }, false) });
+    }
     const meeting = /^\/api\/meetings\/([^/]+)$/.exec(path);
     if (meeting) {
       if (method === "DELETE") { await remove("meetings", meeting[1]); return response({ deleted: true }); }

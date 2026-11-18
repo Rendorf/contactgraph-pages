@@ -13,14 +13,14 @@ export type Meeting = { id: string; contact_id: string; contact_ids?: string[]; 
 type MeetingContact = { id: string; name: string; organization?: string };
 const participants = (meeting: Meeting) => meeting.contact_ids?.length ? meeting.contact_ids : [meeting.contact_id];
 
-function ParticipantPicker({ contacts, selected, onChange, lockedId }: { contacts: MeetingContact[]; selected: string[]; onChange: (ids: string[]) => void; lockedId?: string }) {
+export function ParticipantPicker({ contacts, selected, onChange, lockedId, label = "People at this meeting", emptyText = "Choose at least one contact" }: { contacts: MeetingContact[]; selected: string[]; onChange: (ids: string[]) => void; lockedId?: string; label?: string; emptyText?: string }) {
   const [search, setSearch] = useState("");
   const byId = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
   const matches = contacts.filter((contact) => normalizeSearch(`${contact.name} ${contact.organization ?? ""}`).includes(normalizeSearch(search))).sort((a, b) => searchRank(a.name, search) - searchRank(b.name, search)).slice(0, 80);
-  return <div className="meeting-participants"><span className="meeting-participants-label">People at this meeting</span>
-    <div className="meeting-selected">{selected.length ? selected.map((id) => <span key={id}>{byId.get(id)?.name ?? "Contact unavailable"}{id !== lockedId && <button type="button" onClick={() => onChange(selected.filter((item) => item !== id))} aria-label={`Remove ${byId.get(id)?.name ?? "contact"}`}><X /></button>}</span>) : <small>Choose at least one contact</small>}</div>
-    <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a contact to add…" aria-label="Search meeting contacts" />
-    <div className="meeting-participant-options" role="group" aria-label="Meeting contacts">{matches.map((contact) => <label key={contact.id}><input type="checkbox" checked={selected.includes(contact.id)} disabled={contact.id === lockedId || (!selected.includes(contact.id) && selected.length >= 100)} onChange={(event) => onChange(event.target.checked ? [...selected, contact.id] : selected.filter((id) => id !== contact.id))} /><span>{contact.name}{contact.organization ? <small> · {contact.organization}</small> : null}</span></label>)}{!matches.length && <small>No matching contacts</small>}</div>
+  return <div className="meeting-participants"><span className="meeting-participants-label">{label}</span>
+    <div className="meeting-selected">{selected.length ? selected.map((id) => <span key={id}>{byId.get(id)?.name ?? "Contact unavailable"}{id !== lockedId && <button type="button" onClick={() => onChange(selected.filter((item) => item !== id))} aria-label={`Remove ${byId.get(id)?.name ?? "contact"}`}><X /></button>}</span>) : <small>{emptyText}</small>}</div>
+    <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a contact to add…" aria-label={`Search: ${label}`} />
+    <div className="meeting-participant-options" role="group" aria-label={label}>{matches.map((contact) => <label key={contact.id}><input type="checkbox" checked={selected.includes(contact.id)} disabled={contact.id === lockedId || (!selected.includes(contact.id) && selected.length >= 100)} onChange={(event) => onChange(event.target.checked ? [...selected, contact.id] : selected.filter((id) => id !== contact.id))} /><span>{contact.name}{contact.organization ? <small> · {contact.organization}</small> : null}</span></label>)}{!matches.length && <small>No matching contacts</small>}</div>
   </div>;
 }
 

@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from contactdb import list_canvases, list_contacts, list_holiday_messages, list_holidays, list_meetings  # noqa: E402
 import contactdb  # noqa: E402
 from calendar_states import list_states  # noqa: E402
+import contact_links  # noqa: E402
 
 if not hasattr(contactdb, "validate_canvas_kanban"):
     raise RuntimeError("Update the ContactGraph server code before exporting or synchronizing Kanban boards.")
@@ -67,6 +68,7 @@ def export(database: Path, output: Path, osint_database: Path | None = None) -> 
             "followup_actions": actions,
             "followup_settings": settings,
             "calendar_occurrence_states": list_states(connection),
+            "contact_links": [{field: link[field] for field in contact_links.FIELDS} for link in contact_links.list_links(connection)],
             "roles": roles,
             "members": members,
         }

@@ -1,11 +1,14 @@
 "use client";
 import { normalizeSearch } from "./search";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Maximize2, Minus, Network, Plus, RotateCcw, Search, Tag, UsersRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Building2, Network, RotateCcw, Search, Share2, Tag, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { useAuth } from "./auth-context";
+import { GraphZoomControls, useGraphZoom } from "./graph-zoom";
+import { PeopleGraph } from "./people-graph";
 
 type GraphContact = {
   id: string;
@@ -17,7 +20,7 @@ type GraphContact = {
 
 type Point = { x: number; y: number };
 type TagEdge = { source: string; target: string; shared: number };
-type GraphMode = "labels" | "organizations";
+type GraphMode = "labels" | "organizations" | "people";
 
 const WIDTH = 1100;
 const HEIGHT = 720;
@@ -49,38 +52,9 @@ export function ContactGraph({ contacts, onSelectContact }: {
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
   const [hoveredContact, setHoveredContact] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef(zoom);
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    let pinch: { distance: number; zoom: number } | null = null;
-    const distance = (event: TouchEvent) => Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
-    const start = (event: TouchEvent) => {
-      if (event.touches.length === 2) pinch = { distance: distance(event), zoom: zoomRef.current };
-    };
-    const move = (event: TouchEvent) => {
-      if (event.touches.length !== 2) return;
-      event.preventDefault();
-      if (!pinch) pinch = { distance: distance(event), zoom: zoomRef.current };
-      setZoom(Math.max(0.5, Math.min(2, Number((pinch.zoom * distance(event) / Math.max(1, pinch.distance)).toFixed(2)))));
-    };
-    const end = (event: TouchEvent) => { if (event.touches.length < 2) pinch = null; };
-    canvas.addEventListener("touchstart", start, { passive: true });
-    canvas.addEventListener("touchmove", move, { passive: false });
-    canvas.addEventListener("touchend", end);
-    canvas.addEventListener("touchcancel", end);
-    return () => {
-      canvas.removeEventListener("touchstart", start);
-      canvas.removeEventListener("touchmove", move);
-      canvas.removeEventListener("touchend", end);
-      canvas.removeEventListener("touchcancel", end);
-    };
-  }, []);
-  const zoomOut = () => setZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))));
-  const zoomIn = () => setZoom((value) => Math.min(2, Number((value + 0.25).toFixed(2))));
+  const { zoom, setZoom, zoomIn, zoomOut, canvasRef } = useGraphZoom();
+  const { can } = useAuth();
+  const canViewPeople = can("connections.view") && can("contacts.view");
 
   const labelOptions = useMemo(() => {
     const counts = new Map<string, number>();
@@ -202,6 +176,12 @@ export function ContactGraph({ contacts, onSelectContact }: {
   }, [contacts, focusTag, graphMode, selectedLabel, showUnassigned, tagQuery]);
 
   const hovered = graph.visibleContacts.find((contact) => contact.id === hoveredContact);
+  const modeSwitch = <div className={`graph-mode-switch ${canViewPeople ? "three" : ""}`} role="radiogroup" aria-label="Group graph nodes by">
+    <button role="radio" aria-checked={graphMode === "labels"} className={graphMode === "labels" ? "active" : ""} onClick={() => { setGraphMode("labels"); setFocusTag(selectedLabel); setTagQuery(""); }}><Tag />Tags</button>
+    <button role="radio" aria-checked={graphMode === "organizations"} className={graphMode === "organizations" ? "active" : ""} onClick={() => { setSelectedLabel((current) => current ?? (graphMode === "labels" ? focusTag : null)); setGraphMode("organizations"); setFocusTag(null); setTagQuery(""); }}><Building2 />Organizations</button>
+    {canViewPeople && <button role="radio" aria-checked={graphMode === "people"} className={graphMode === "people" ? "active" : ""} onClick={() => setGraphMode("people")}><Share2 />People</button>}
+  </div>;
+  if (graphMode === "people" && canViewPeople) return <PeopleGraph contacts={contacts} onSelectContact={onSelectContact} modeSwitch={modeSwitch} />;
 
   return <div className="graph-module">
     <div className="graph-toolbar">
@@ -211,10 +191,7 @@ export function ContactGraph({ contacts, onSelectContact }: {
         <p className="module-subtitle">{graphMode === "labels" ? "Tags connect when they share people." : "Organizations form clusters around their people."} Contacts form the outer layer.</p>
       </div>
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-72">
-        <div className="graph-mode-switch" role="radiogroup" aria-label="Group graph nodes by">
-          <button role="radio" aria-checked={graphMode === "labels"} className={graphMode === "labels" ? "active" : ""} onClick={() => { setGraphMode("labels"); setFocusTag(selectedLabel); setTagQuery(""); }}><Tag />Tags</button>
-          <button role="radio" aria-checked={graphMode === "organizations"} className={graphMode === "organizations" ? "active" : ""} onClick={() => { setSelectedLabel((current) => current ?? (graphMode === "labels" ? focusTag : null)); setGraphMode("organizations"); setFocusTag(null); setTagQuery(""); }}><Building2 />Organizations</button>
-        </div>
+        {modeSwitch}
         <label className="graph-tag-filter"><span>Filter by tag</span><NativeSelect className="w-full bg-white" value={selectedLabel ?? ""} onChange={(event) => { const label = event.target.value || null; setSelectedLabel(label); setFocusTag(graphMode === "labels" ? label : null); setTagQuery(""); }} aria-label="Filter graph by tag"><NativeSelectOption value="">All tags</NativeSelectOption>{labelOptions.map(([label, count]) => <NativeSelectOption key={label} value={label}>{label} ({count})</NativeSelectOption>)}</NativeSelect></label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#7b909b]" />
@@ -226,7 +203,7 @@ export function ContactGraph({ contacts, onSelectContact }: {
 
     <div className="graph-summary">
       <div className="graph-summary-items"><span><Network className="size-4" />{graph.tags.length} {graphMode === "labels" ? "tag" : "organization"} nodes</span><span><UsersRound className="size-4" />{graph.visibleContacts.length} contact nodes shown</span><span>{graph.tagEdges.length} {graphMode === "labels" ? "tag" : "organization"} connections</span>{selectedLabel && <span className="graph-focus">Tag: {selectedLabel} · {selectedLabelCount} people</span>}{focusTag && (graphMode === "organizations" || focusTag !== selectedLabel) && <span className="graph-focus">Focused on {focusTag}</span>}</div>
-      <div className="zoom-controls" aria-label="Graph zoom controls"><Button size="icon" variant="outline" onClick={zoomOut} disabled={zoom <= 0.5} aria-label="Zoom graph out"><Minus /></Button><button className="zoom-level" onClick={() => setZoom(1)} aria-label="Reset graph zoom to 100 percent">{Math.round(zoom * 100)}%</button><Button size="icon" variant="outline" onClick={zoomIn} disabled={zoom >= 2} aria-label="Zoom graph in"><Plus /></Button><Button size="icon" variant="outline" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label="Reset graph zoom"><Maximize2 /></Button></div>
+      <GraphZoomControls zoom={zoom} setZoom={setZoom} zoomIn={zoomIn} zoomOut={zoomOut} />
     </div>
 
     {graphMode === "organizations" && selectedLabel && <section className="graph-distribution" aria-label={`Organization distribution for ${selectedLabel}`}>
