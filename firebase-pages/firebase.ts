@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signOut, type Auth } from "firebase/auth";
+import { browserLocalPersistence, browserSessionPersistence, getAuth, setPersistence, signOut, type Auth, type Persistence } from "firebase/auth";
 import { clearIndexedDbPersistence, initializeFirestore, memoryLocalCache, persistentLocalCache, persistentMultipleTabManager, terminate, type Firestore } from "firebase/firestore";
 
 const config = {
@@ -36,6 +36,20 @@ export async function setTrustedDevice(enabled: boolean) {
 }
 
 export function isTrustedDevice() { return trusted; }
+
+// "Keep me signed in": remember only the Google sign-in on this device (no cached data).
+// Without it the sign-in lasts one browser session, which a phone's home-screen app
+// loses whenever the system closes it in the background.
+let keepSignedIn = false;
+try { keepSignedIn = window.localStorage.getItem("contactgraph-keep-signed-in") === "1"; } catch { /* unavailable browser storage */ }
+export function keepsSignedIn() { return keepSignedIn; }
+export function authPersistence(): Persistence { return trusted || keepSignedIn ? browserLocalPersistence : browserSessionPersistence; }
+export async function setKeepSignedIn(enabled: boolean) {
+  window.localStorage.setItem("contactgraph-keep-signed-in", enabled ? "1" : "0");
+  keepSignedIn = enabled;
+  // Moves the current sign-in to the matching storage, so no new sign-in is needed.
+  if (auth) await setPersistence(auth, authPersistence());
+}
 
 export function requireFirebase() {
   if (!auth || !db) throw new Error("Firebase is not configured for this site.");

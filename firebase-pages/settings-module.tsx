@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useAuth } from "./auth-context";
-import { auth, db, isTrustedDevice, secureSignOut, setTrustedDevice } from "./firebase";
+import { auth, db, isTrustedDevice, keepsSignedIn, secureSignOut, setKeepSignedIn, setTrustedDevice } from "./firebase";
 import { toast } from "sonner";
 
 type SyncControl = {
@@ -86,6 +86,21 @@ function TrustedDeviceCard() {
   </div></section>;
 }
 
+function KeepSignedInCard() {
+  const [keep, setKeep] = useState(keepsSignedIn);
+  const [saving, setSaving] = useState(false);
+  const save = async (enabled: boolean) => {
+    setSaving(true);
+    try { await setKeepSignedIn(enabled); setKeep(enabled); toast.success(enabled ? "This device will stay signed in until you sign out" : "This device will ask you to sign in again after the browser session ends"); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Could not save the sign-in preference"); }
+    finally { setSaving(false); }
+  };
+  return <section className="settings-card"><div className="settings-card-body"><h2>Stay signed in</h2><p>Remember your Google sign-in on this device until you press Sign out, for example in a home-screen app on your phone. Only the sign-in is kept: your contacts still load fresh and are not stored on the device. Anyone who can unlock this device can open ContactGraph.</p>
+    <label className="accounts-check"><input type="checkbox" checked={keep || isTrustedDevice()} disabled={saving || isTrustedDevice()} onChange={(event) => void save(event.target.checked)} />Keep me signed in on this device</label>
+    {isTrustedDevice() && <p>Offline access is on for this device, so it already stays signed in.</p>}
+  </div></section>;
+}
+
 type OpenAiStatus = { configured: boolean; source: "settings" | "environment" | null; key_hint: string; model: string };
 
 function OpenAiCard() {
@@ -135,7 +150,7 @@ export function SettingsModule({ embedded = false }: { embedded?: boolean }) {
   return <div className={embedded ? "settings-content" : "settings-module"}>
     {!embedded && <div className="module-heading"><div><p className="eyebrow">Administration</p><h1 className="module-title">Settings</h1></div></div>}
     <ExternalDataNotice />
-    <div className="settings-grid"><ThreeWaySyncCard /><OpenAiCard /><TrustedDeviceCard /><section className="settings-card"><div className="settings-card-body"><h2>Live OSINT</h2><p>Live OSINT collection still requires a private server. Saved history remains private.</p></div></section></div>
+    <div className="settings-grid"><ThreeWaySyncCard /><OpenAiCard /><KeepSignedInCard /><TrustedDeviceCard /><section className="settings-card"><div className="settings-card-body"><h2>Live OSINT</h2><p>Live OSINT collection still requires a private server. Saved history remains private.</p></div></section></div>
   </div>;
 }
 
@@ -149,5 +164,5 @@ export function AccountSettingsModule() {
     }
     window.location.assign(import.meta.env.BASE_URL);
   };
-  return <div className="settings-content"><div className="settings-grid"><section className="settings-card"><div className="settings-card-body"><h2>Account</h2><p>{user?.display_name} · {user?.username}</p><p>Role: {user?.role_id}</p><Button variant="outline" onClick={() => { void logout().catch((error) => toast.error(error instanceof Error ? error.message : "Could not sign out")); }}>Sign out</Button></div></section><TrustedDeviceCard /></div></div>;
+  return <div className="settings-content"><div className="settings-grid"><section className="settings-card"><div className="settings-card-body"><h2>Account</h2><p>{user?.display_name} · {user?.username}</p><p>Role: {user?.role_id}</p><Button variant="outline" onClick={() => { void logout().catch((error) => toast.error(error instanceof Error ? error.message : "Could not sign out")); }}>Sign out</Button></div></section><KeepSignedInCard /><TrustedDeviceCard /></div></div>;
 }

@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { GoogleAuthProvider, browserLocalPersistence, browserSessionPersistence, onAuthStateChanged, setPersistence, signInWithPopup, signOut } from "firebase/auth";
+import { GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { auth, configured, db, isTrustedDevice } from "./firebase";
+import { auth, authPersistence, configured, db, keepsSignedIn, setKeepSignedIn } from "./firebase";
 import { resetFirebaseApi } from "./api";
 
 type User = { id: string; username: string; display_name: string; role_id: string; permissions: string[]; must_change_password: false; auth_source: "google" };
@@ -18,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState("");
   const [generation, setGeneration] = useState(0);
+  const [remember, setRemember] = useState(keepsSignedIn);
 
   useEffect(() => {
     if (!auth || !db) return;
@@ -65,13 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) return;
     setError("");
     try {
-      await setPersistence(auth, isTrustedDevice() ? browserLocalPersistence : browserSessionPersistence);
+      if (remember !== keepsSignedIn()) await setKeepSignedIn(remember);
+      await setPersistence(auth, authPersistence());
       await signInWithPopup(auth, new GoogleAuthProvider());
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Google sign-in failed."); }
   };
 
   if (!configured) return <div className="auth-screen"><div className="auth-card"><h1>Firebase setup required</h1><p>The Pages build needs its Firebase project configuration before it can open private data.</p></div></div>;
   if (loading) return <div className="auth-screen">Checking access…</div>;
-  if (!user) return <div className="auth-screen"><div className="auth-card"><h1>ContactGraph</h1><p>Sign in with an approved Google account.</p>{error && <p role="alert" className="auth-error">{error}</p>}<Button onClick={() => void login()}>Continue with Google</Button></div></div>;
+  if (!user) return <div className="auth-screen"><div className="auth-card"><h1>ContactGraph</h1><p>Sign in with an approved Google account.</p>{error && <p role="alert" className="auth-error">{error}</p>}<label className="accounts-check"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Keep me signed in on this device</label><Button onClick={() => void login()}>Continue with Google</Button></div></div>;
   return <AuthContext.Provider value={{ user, offline: false, can, refresh }}>{children}</AuthContext.Provider>;
 }
