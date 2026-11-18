@@ -18,3 +18,7 @@ snapshot, GitHub repository and Pages artifact are separate trust boundaries.
 
 No production data is used in emulator tests. The active local DuckDB remains
 authoritative until import verification and domain cutover are complete.
+
+## Sign-in persistence (2026-11-18)
+
+By default the Google sign-in lasts one browser session. "Keep me signed in on this device" (sign-in screen or Settings → Account) or offline access switches it to local persistence, so the device stays signed in until Sign out. Only the Firebase Auth sign-in is kept; contact data is cached only with offline access. Anyone holding the unlocked device can then open the app, so the device lock is the protection. Access is still revoked centrally: deactivating the member stops all reads, because the rules check `members/<email>.active` on every request.
