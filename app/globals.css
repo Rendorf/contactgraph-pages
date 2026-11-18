@@ -1019,6 +1019,8 @@ button.small-tag:hover { background:#dff0ef; color:#0b626d; }
 .auth-card { width:min(100%,420px); display:grid; gap:1rem; padding:2rem; border:1px solid #d8e3e8; border-radius:1.25rem; background:white; box-shadow:0 16px 50px #172f3d12; }
 .auth-card h1 { font-size:1.55rem; font-weight:700; }
 .auth-card p { color:#647985; }
+.auth-card label.auth-remember { display:flex; align-items:center; gap:.6rem; min-height:2.75rem; color:#2c4652; font-weight:600; cursor:pointer; }
+.auth-card label.auth-remember input { width:1.15rem; height:1.15rem; flex:none; accent-color:#172f3d; }
 .auth-card .auth-passkey-help { margin:-.3rem 0 .1rem; font-size:.78rem; line-height:1.45; }
 .auth-card label { display:grid; gap:.4rem; font-size:.85rem; font-weight:600; }
 .auth-error { color:#b52e3c !important; }

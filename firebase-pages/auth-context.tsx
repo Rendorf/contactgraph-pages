@@ -74,6 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (!configured) return <div className="auth-screen"><div className="auth-card"><h1>Firebase setup required</h1><p>The Pages build needs its Firebase project configuration before it can open private data.</p></div></div>;
   if (loading) return <div className="auth-screen">Checking access…</div>;
-  if (!user) return <div className="auth-screen"><div className="auth-card"><h1>ContactGraph</h1><p>Sign in with an approved Google account.</p>{error && <p role="alert" className="auth-error">{error}</p>}<label className="accounts-check"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Keep me signed in on this device</label><Button onClick={() => void login()}>Continue with Google</Button></div></div>;
+  if (!user) return <div className="auth-screen"><div className="auth-card"><h1>ContactGraph</h1><p>Sign in with an approved Google account.</p>{error && <p role="alert" className="auth-error">{error}</p>}<label className="auth-remember"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Keep me signed in on this device</label><Button onClick={() => void login()}>Continue with Google</Button></div></div>;
   return <AuthContext.Provider value={{ user, offline: false, can, refresh }}>{children}</AuthContext.Provider>;
 }
