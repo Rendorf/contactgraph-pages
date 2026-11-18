@@ -56,10 +56,10 @@ export function MeetingRecorder({ meetingId, ensureMeeting, recordings, onChange
     return () => window.clearInterval(timer);
   }, [state]);
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { if (state !== "idle") event.preventDefault(); };
+    const warn = (event: BeforeUnloadEvent) => { if (state !== "idle" || pending) event.preventDefault(); };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [state]);
+  }, [pending, state]);
   useEffect(() => () => stream.current?.getTracks().forEach((track) => track.stop()), []);
   useEffect(() => { const url = pending?.url; return () => { if (url) URL.revokeObjectURL(url); }; }, [pending?.url]);
 
@@ -75,7 +75,6 @@ export function MeetingRecorder({ meetingId, ensureMeeting, recordings, onChange
       const body = await response.json().catch(() => ({})) as { recording?: MeetingRecording; error?: string; warning?: string };
       if (!response.ok || !body.recording) throw new Error(body.error || "Recording could not be saved");
       onChange(body.recording);
-      if (pending?.url) URL.revokeObjectURL(pending.url);
       setPending(null);
       if (body.warning) toast.warning(body.warning);
       else {
@@ -84,7 +83,7 @@ export function MeetingRecorder({ meetingId, ensureMeeting, recordings, onChange
       }
     } catch (error) {
       setPending((current) => current ?? { blob, duration, url: URL.createObjectURL(blob) });
-      toast.error(`${error instanceof Error ? error.message : "Recording could not be saved"}. Retry or download the unsaved audio below.`);
+      toast.error(`${error instanceof Error ? error.message : "Recording could not be saved"}. Your preview is still available below.`);
     }
     finally { setState("idle"); setElapsed(0); }
   };
@@ -108,8 +107,11 @@ export function MeetingRecorder({ meetingId, ensureMeeting, recordings, onChange
         activeStream.getTracks().forEach((track) => track.stop());
         stream.current = null;
         recorder.current = null;
-        if (blob.size) void upload(blob, duration);
-        else { setState("idle"); toast.error("The microphone produced an empty recording."); }
+        setState("idle");
+        if (blob.size) {
+          setPending({ blob, duration, url: URL.createObjectURL(blob) });
+          toast.info("Recording ready to review. It has not been saved.");
+        } else toast.error("The microphone produced an empty recording.");
       };
       elapsedRef.current = 0;
       activeRecorder.start(1000);
@@ -120,6 +122,12 @@ export function MeetingRecorder({ meetingId, ensureMeeting, recordings, onChange
   const pause = () => { recorder.current?.pause(); setState("paused"); };
   const resume = () => { recorder.current?.resume(); setState("recording"); };
   const stop = () => { if (recorder.current && recorder.current.state !== "inactive") recorder.current.stop(); };
+  const discardPending = () => {
+    if (!pending || !window.confirm("Discard this unsaved recording?")) return;
+    setPending(null);
+    setElapsed(0);
+    toast.info("Unsaved recording discarded");
+  };
 
   const transcribe = async (id: string, notify = true) => {
     setWorkingId(id);
@@ -172,15 +180,19 @@ export function MeetingRecorder({ meetingId, ensureMeeting, recordings, onChange
   return <div className="meeting-recorder">
     <div className="meeting-recorder-controls">
       <label className="meeting-consent"><input type="checkbox" checked={consent} disabled={state !== "idle"} onChange={(event) => setConsent(event.target.checked)} /><span>Everyone has agreed to this recording</span></label>
-      <div className={`meeting-recording-status ${state}`}><span>{state === "idle" ? "Microphone ready" : state === "uploading" ? "Saving recording…" : state === "paused" ? "Recording paused" : "Recording"}</span>{state !== "idle" && state !== "uploading" ? <strong>{clock(elapsed)}</strong> : null}</div>
+      <div className={`meeting-recording-status ${state}`}><span>{state === "idle" ? pending ? "Review recording below" : "Microphone ready" : state === "uploading" ? "Saving recording…" : state === "paused" ? "Recording paused" : "Recording"}</span>{state !== "idle" && state !== "uploading" ? <strong>{clock(elapsed)}</strong> : null}</div>
       <div className="meeting-recorder-buttons">
         {state === "idle" ? <Button type="button" variant="outline" disabled={!consent || Boolean(pending)} onClick={() => void start()}><Mic />Record meeting</Button> : null}
         {state === "recording" ? <Button type="button" variant="outline" onClick={pause}><Pause />Pause</Button> : null}
         {state === "paused" ? <Button type="button" variant="outline" onClick={resume}><Play />Resume</Button> : null}
-        {state === "recording" || state === "paused" ? <Button type="button" onClick={stop}><Square />Stop &amp; save</Button> : null}
+        {state === "recording" || state === "paused" ? <Button type="button" onClick={stop}><Square />Stop &amp; review</Button> : null}
       </div>
     </div>
-    {pending ? <div className="meeting-unsaved-recording" role="alert"><span>This recording is not saved yet.</span><div><Button type="button" size="sm" onClick={() => void upload(pending.blob, pending.duration)}>Retry save</Button><a className="button-link" href={pending.url} download={`contactgraph-meeting-recording.${pending.blob.type === "audio/mp4" ? "m4a" : pending.blob.type === "audio/ogg" ? "ogg" : "webm"}`}>Download backup</a></div></div> : null}
+    {pending ? <div className="meeting-unsaved-recording" role="region" aria-live="polite" aria-label="Unsaved recording preview">
+      <div className="meeting-unsaved-recording-heading"><strong>Preview · Not saved</strong><span>{clock(pending.duration)} · {(pending.blob.size / 1_000_000).toFixed(1)} MB</span></div>
+      <audio controls preload="metadata" src={pending.url} />
+      <div className="meeting-unsaved-recording-actions"><Button type="button" size="sm" disabled={state === "uploading"} onClick={() => void upload(pending.blob, pending.duration)}>{state === "uploading" ? "Saving…" : "Save recording"}</Button><Button type="button" size="sm" variant="outline" disabled={state === "uploading"} onClick={discardPending}><Trash2 />Discard</Button><a className="button-link" href={pending.url} download={`contactgraph-meeting-recording.${pending.blob.type === "audio/mp4" ? "m4a" : pending.blob.type === "audio/ogg" ? "ogg" : "webm"}`}>Download backup</a></div>
+    </div> : null}
     {recordings.length ? <div className="meeting-recordings-list">{recordings.map((item) => <article key={item.id}>
       <div><strong>{clock(item.duration_ms)}</strong><span>{(item.size_bytes / 1_000_000).toFixed(1)} MB · {item.storage_backend === "device" ? "Saved on this trusted device · sync pending" : item.transcript_status === "ready" ? "Transcript ready" : item.transcript_status === "processing" ? "Transcribing…" : item.transcript_status === "failed" ? "Transcription failed" : "Transcription pending"}</span></div>
       <audio controls preload="none" src={`/api/meeting-recordings/${encodeURIComponent(item.id)}/audio`} />

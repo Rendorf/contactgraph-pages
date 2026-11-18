@@ -291,8 +291,11 @@ button.small-tag:hover { background:#dff0ef; color:#0b626d; }
 .meeting-recording-status.recording span::before { content:""; display:inline-block; width:.48rem; height:.48rem; margin-right:.4rem; border-radius:50%; background:#d84c43; animation:recording-pulse 1.3s ease-in-out infinite; }
 .meeting-recording-status.paused { background:#fff7df; color:#8a641a; }
 .meeting-recorder-buttons,.meeting-recording-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; }
-.meeting-unsaved-recording { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.6rem; border:1px solid #e4b85a; border-radius:.65rem; background:#fff8e7; padding:.6rem; color:#755617; font-size:.7rem; }
-.meeting-unsaved-recording>div { display:flex; align-items:center; gap:.45rem; }
+.meeting-unsaved-recording { display:grid; grid-template-columns:minmax(8rem,auto) minmax(12rem,1fr); align-items:center; gap:.6rem; border:1px solid #e4b85a; border-radius:.65rem; background:#fff8e7; padding:.7rem; color:#755617; font-size:.7rem; }
+.meeting-unsaved-recording-heading strong,.meeting-unsaved-recording-heading span { display:block; }
+.meeting-unsaved-recording-heading span { margin-top:.15rem; font-size:.62rem; }
+.meeting-unsaved-recording audio { width:100%; min-width:0; height:2.2rem; }
+.meeting-unsaved-recording-actions { display:flex; grid-column:1/-1; flex-wrap:wrap; align-items:center; gap:.45rem; }
 .button-link { display:inline-flex; min-height:2rem; align-items:center; border:1px solid #c9d8dd; border-radius:.45rem; background:#fff; padding:0 .65rem; color:#275463; font-weight:700; text-decoration:none; }
 .meeting-recordings-list { display:grid; gap:.6rem; }
 .meeting-recordings-list article { display:grid; grid-template-columns:minmax(8rem,auto) minmax(12rem,1fr) auto; align-items:center; gap:.7rem; border-top:1px solid #dce8eb; padding-top:.65rem; }
@@ -305,7 +308,7 @@ button.small-tag:hover { background:#dff0ef; color:#0b626d; }
 .contact-meeting-audio { display:flex; align-items:center; gap:.5rem; margin-top:.45rem; }
 .contact-meeting-audio audio { width:min(100%,24rem); height:2rem; }
 @keyframes recording-pulse { 50% { opacity:.35; transform:scale(.85); } }
-@media (max-width:700px) { .meeting-recordings-list article { grid-template-columns:1fr auto; } .meeting-recordings-list audio { grid-column:1/-1; grid-row:2; } }
+@media (max-width:700px) { .meeting-unsaved-recording { grid-template-columns:1fr; } .meeting-unsaved-recording audio,.meeting-unsaved-recording-actions { grid-column:1; } .meeting-recordings-list article { grid-template-columns:1fr auto; } .meeting-recordings-list audio { grid-column:1/-1; grid-row:2; } }
 .meeting-form label { display:grid; gap:.35rem; color:#536c78; font-size:.7rem; font-weight:700; }
 .meeting-participants { display:grid; gap:.45rem; min-width:0; }
 .meeting-participants-label { color:#536c78; font-size:.7rem; font-weight:700; }
