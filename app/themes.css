@@ -1,0 +1,54 @@
+:root {
+  --background:#f5f3ed; --foreground:#17383d; --card:#fffdf9; --card-foreground:#17383d;
+  --popover:#fffdf9; --popover-foreground:#17383d; --primary:#17383d; --primary-foreground:#fff;
+  --secondary:#e9eeea; --secondary-foreground:#274b4f; --muted:#e9eeea; --muted-foreground:#52696a;
+  --accent:#dcefeb; --accent-foreground:#075f5b; --destructive:#b9473f; --border:#d6ddd7;
+  --input:#c8d3ce; --ring:#0a7b74; --radius:.85rem; --sidebar:#17383d; --sidebar-foreground:#edf6f3;
+  --sidebar-primary:#dcefeb; --sidebar-primary-foreground:#075f5b; --sidebar-accent:#294d50;
+  --sidebar-accent-foreground:#fff; --sidebar-border:#35585a; --sidebar-ring:#5fd7c8;
+  --surface-raised:#fffdf9; --surface-subtle:#efefe9; --text-subtle:#52696a; --brand:#0a7b74;
+  --brand-strong:#075f5b; --brand-soft:#dcefeb; --status-attention:#8d5a17; --status-attention-soft:#f7ead3;
+  --status-urgent:#b9473f; --status-urgent-soft:#fae4df; --status-success:#297052; --shadow-color:18 49 52;
+}
+
+html[data-theme="dark"] {
+  --background:#101716; --foreground:#edf4f2; --card:#18211f; --card-foreground:#edf4f2;
+  --popover:#18211f; --popover-foreground:#edf4f2; --primary:#5fd7c8; --primary-foreground:#071311;
+  --secondary:#22302d; --secondary-foreground:#dce8e5; --muted:#22302d; --muted-foreground:#a9bbb7;
+  --accent:#213d38; --accent-foreground:#8fe7da; --destructive:#ff9187; --border:#35423f;
+  --input:#465652; --ring:#5fd7c8; --sidebar:#0b2423; --sidebar-foreground:#edf4f2;
+  --sidebar-primary:#213d38; --sidebar-primary-foreground:#8fe7da; --sidebar-accent:#173330;
+  --sidebar-accent-foreground:#edf4f2; --sidebar-border:#354c48; --sidebar-ring:#5fd7c8;
+  --surface-raised:#18211f; --surface-subtle:#202b29; --text-subtle:#a9bbb7; --brand:#5fd7c8;
+  --brand-strong:#8fe7da; --brand-soft:#213d38; --status-attention:#ffc46a; --status-attention-soft:#3c3020;
+  --status-urgent:#ff9187; --status-urgent-soft:#3d2421; --status-success:#70d1a4; --shadow-color:0 0 0;
+}
+
+html[data-theme="cyberpunk"] {
+  --background:#070914; --foreground:#e9fbff; --card:#101124; --card-foreground:#e9fbff;
+  --popover:#101124; --popover-foreground:#e9fbff; --primary:#1be5ff; --primary-foreground:#041014;
+  --secondary:#171a36; --secondary-foreground:#d8f7ff; --muted:#171a36; --muted-foreground:#9ab0c0;
+  --accent:#102f44; --accent-foreground:#72f1ff; --destructive:#ff65bf; --border:#30376c;
+  --input:#404a85; --ring:#1be5ff; --sidebar:#090b20; --sidebar-foreground:#e9fbff;
+  --sidebar-primary:#102f44; --sidebar-primary-foreground:#72f1ff; --sidebar-accent:#1c1740;
+  --sidebar-accent-foreground:#fff; --sidebar-border:#30376c; --sidebar-ring:#ff65bf;
+  --surface-raised:#101124; --surface-subtle:#15172d; --text-subtle:#9ab0c0; --brand:#1be5ff;
+  --brand-strong:#72f1ff; --brand-soft:#102f44; --status-attention:#f2e85c; --status-attention-soft:#35320e;
+  --status-urgent:#ff65bf; --status-urgent-soft:#3a1234; --status-success:#65ffc6; --shadow-color:27 229 255;
+}
+
+html[data-theme="minimal"] {
+  --background:#f8f8f6; --foreground:#151515; --card:#fff; --card-foreground:#151515;
+  --popover:#fff; --popover-foreground:#151515; --primary:#151515; --primary-foreground:#fff;
+  --secondary:#ececea; --secondary-foreground:#303030; --muted:#ececea; --muted-foreground:#5a5a5a;
+  --accent:#ececea; --accent-foreground:#000; --destructive:#222; --border:#d6d6d3;
+  --input:#c8c8c5; --ring:#151515; --radius:.35rem; --sidebar:#151515; --sidebar-foreground:#fff;
+  --sidebar-primary:#ececea; --sidebar-primary-foreground:#151515; --sidebar-accent:#2a2a2a;
+  --sidebar-accent-foreground:#fff; --sidebar-border:#3d3d3d; --sidebar-ring:#fff;
+  --surface-raised:#fff; --surface-subtle:#f0f0ed; --text-subtle:#5a5a5a; --brand:#151515;
+  --brand-strong:#000; --brand-soft:#ececea; --status-attention:#4a4a4a; --status-attention-soft:#eeeeec;
+  --status-urgent:#222; --status-urgent-soft:#eeeeec; --status-success:#303030; --shadow-color:0 0 0;
+}
+
+html[data-theme="dark"],html[data-theme="cyberpunk"] { color-scheme:dark; }
+html[data-theme="warm"],html[data-theme="minimal"],html[data-theme="light"] { color-scheme:light; }

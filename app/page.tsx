@@ -23,8 +23,14 @@ import { ContactMeetingHistory, MeetingsModule } from "./meetings-module";
 import { ContactConnections } from "./contact-connections";
 import { FollowupsModule } from "./followups-module";
 import { ContactFollowupReminders } from "./contact-followup-reminders";
+import { ContactTimeline } from "./contact-timeline";
 import { OfflineStatus } from "./offline-status";
 import { OsintModule } from "./osint-module";
+import { useDesignPreview } from "./appearance";
+import { TodayModule } from "./today-module";
+import { MoreModule } from "./more-module";
+import { RedesignedNavigation } from "./redesigned-navigation";
+import { moduleDefinition, type WorkspaceModule } from "./module-registry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,7 +42,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
-type Module = "contacts" | "graph" | "calendar" | "holidays" | "notifications" | "duplicates" | "meetings" | "followups" | "canva" | "osint" | "settings" | "accounts" | "account";
+type Module = WorkspaceModule;
 const MODULE_PERMISSIONS: Partial<Record<Module, string>> = {
   graph: "graph.view", holidays: "holidays.view", notifications: "drafts.view",
   duplicates: "duplicates.view", meetings: "meetings.view", followups: "followups.view",
@@ -138,6 +144,8 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
   isNew?: boolean;
 }) {
   const { can, offline } = useAuth();
+  const designPreview = useDesignPreview();
+  const [editorTab, setEditorTab] = useState<"profile" | "timeline" | "edit">(() => isNew ? "edit" : "profile");
   const [draft, setDraft] = useState<Contact | null>(() => contact ? structuredClone(contact) : null);
   const [birthdayMode, setBirthdayMode] = useState<"full" | "month-day">(() => String(contact?.birthday ?? "").startsWith("--") ? "month-day" : "full");
   const [newTag, setNewTag] = useState("");
@@ -218,10 +226,10 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
 
   return <>
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-hidden border-l-[#dce6ec] bg-[#f8fbfc] p-0 sm:max-w-2xl">
-        <SheetHeader className="border-b border-[#dce6ec] bg-white px-5 py-5 pr-14">
-          <SheetTitle className="text-xl tracking-[-0.02em]">{isNew ? "Add contact" : "Edit contact"}</SheetTitle>
-          <SheetDescription>{isNew ? "Enter the contact’s details, then save them to your database." : "Update any field, tags, or notes."}</SheetDescription>
+      <SheetContent className="contact-profile-sheet w-full gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <SheetHeader className="contact-profile-header px-5 py-5 pr-14">
+          <SheetTitle className="text-xl tracking-[-0.02em]">{isNew ? "Add contact" : designPreview.enabled ? "Contact profile" : "Edit contact"}</SheetTitle>
+          <SheetDescription>{isNew ? "Enter the contact’s details, then save them to your database." : designPreview.enabled ? "Review the relationship, activity, or edit the record." : "Update any field, tags, or notes."}</SheetDescription>
         </SheetHeader>
         {draft && <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-7">
           <div className="mb-7 flex items-center gap-4">
@@ -233,6 +241,10 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
             {draft.emails?.find((item) => item.address)?.address ? <a href={`mailto:${draft.emails.find((item) => item.address)?.address}`}><Mail /><span><small>Primary email</small><strong>{draft.emails.find((item) => item.address)?.address}</strong></span></a> : <div className="missing"><Mail /><span><small>Primary email</small><strong>Not recorded</strong></span></div>}
             {draft.phones?.find((item) => item.number)?.number ? <a href={`tel:${draft.phones.find((item) => item.number)?.number}`}><Phone /><span><small>Primary phone</small><strong>{draft.phones.find((item) => item.number)?.number}</strong></span></a> : <div className="missing"><Phone /><span><small>Primary phone</small><strong>Not recorded</strong></span></div>}
           </div>
+          {designPreview.enabled && !isNew && <div className="contact-profile-tabs" role="tablist" aria-label="Contact sections">{([['profile', 'Profile'], ['timeline', 'Timeline'], ['edit', 'Edit']] as const).map(([value, label]) => <button type="button" role="tab" key={value} aria-selected={editorTab === value} onClick={() => setEditorTab(value)}>{label}</button>)}</div>}
+          {designPreview.enabled && !isNew && editorTab === "profile" && <section className="relationship-profile"><div><p className="eyebrow">Relationship</p><strong>{draft.relationship_status || ((draft.labels ?? []).includes("Net") ? "Active network" : "Known contact")}</strong><span>A qualitative status from this contact’s record—never a hidden numeric score.</span></div><dl><div><dt>Role</dt><dd>{draft.role || "Not recorded"}</dd></div><div><dt>Organization</dt><dd>{draft.organization || "Not recorded"}</dd></div><div><dt>Last note</dt><dd>{draft.notes || "No personal notes yet."}</dd></div></dl></section>}
+          {designPreview.enabled && !isNew && editorTab === "timeline" && <ContactTimeline contactId={draft.id} active={open && editorTab === "timeline"} />}
+          {(!designPreview.enabled || isNew || editorTab === "edit") && <>
           {!isNew && can("followups.view") && <section className="editor-section"><div className="contact-history-heading"><h3>Follow-up reminders</h3><span>Choose when this contact should appear in Follow-ups</span></div><ContactFollowupReminders contactId={draft.id} /></section>}
           {!isNew && can("meetings.view") && <section className="editor-section"><div className="contact-history-heading"><h3>Meeting notes</h3><span>Add a dated note or review past meetings</span></div><ContactMeetingHistory contactId={draft.id} contacts={contacts} /></section>}
           {!isNew && can("connections.view") && can("contacts.view") && <section className="editor-section"><div className="contact-history-heading"><h3>Connections</h3><span>People this contact knows, shown in Graph view → People</span></div><ContactConnections contactId={draft.id} contacts={contacts} onOpenContact={onOpenContact} /></section>}
@@ -290,11 +302,12 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
             </button>
             {showAdvanced && <div className="mt-4"><Textarea className="min-h-80 font-mono text-xs leading-relaxed" spellCheck={false} value={rawJson} onChange={(event) => setRawJson(event.target.value)} aria-label="Complete contact JSON" />{rawError && <p className="mt-2 text-sm text-red-600">{rawError}</p>}<Button className="mt-3" type="button" variant="outline" onClick={applyRawJson}>Apply JSON</Button></div>}
           </section>}
+          </>}
         </div>}
         {saveError && <div role="alert" className="border-t border-[#f3c4c4] bg-[#fff7f7] px-5 py-3 text-sm text-red-700"><p>{saveError}</p>{import.meta.env.MODE === "firebase-pages" && saveError.startsWith("Shared database quota is exhausted") && <div className="mt-3"><p className="mb-2">If this is your private device, you can store this contact here until the shared database is available. The edit will appear as pending in Sync status.</p><Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void saveOnThisDevice()}>Trust this device and save locally</Button></div>}</div>}
-        <div className="flex gap-3 border-t border-[#dce6ec] bg-white px-5 py-4 sm:px-7">
+        <div className="contact-profile-footer flex gap-3 px-5 py-4 sm:px-7">
           {!isNew && can("contacts.delete") && <Button variant="outline" className="h-11 text-[#b52e3c] hover:bg-[#fff1f2] hover:text-[#a11e2c]" onClick={() => setDeleteOpen(true)} disabled={!draft || saving}><Trash2 /><span className="hidden sm:inline">Delete</span></Button>}
-          {(can("contacts.edit") || can("tags.edit") || (isNew && can("contacts.create"))) && <Button className="h-11 flex-1 bg-[#172f3d] hover:bg-[#24495c]" onClick={save} disabled={!draft || !draft.name.trim() || saving}>{saving ? "Saving…" : isNew ? "Add contact" : "Save changes"}</Button>}
+          {(!designPreview.enabled || isNew || editorTab === "edit") && (can("contacts.edit") || can("tags.edit") || (isNew && can("contacts.create"))) && <Button className="h-11 flex-1" onClick={save} disabled={!draft || !draft.name.trim() || saving}>{saving ? "Saving…" : isNew ? "Add contact" : "Save changes"}</Button>}
           <Button className="h-11" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
         </div>
       </SheetContent>
@@ -538,12 +551,19 @@ function SettingsArea({ section, onSelect }: { section: SettingsSection; onSelec
 
 export default function Home() {
   const { user, can, offline } = useAuth();
+  const designPreview = useDesignPreview();
   const [activeModule, setActiveModule] = useState<Module>("contacts");
   const moduleAllowed = (module: Module) => {
     const permission = MODULE_PERMISSIONS[module];
     return !permission || can(permission);
   };
   const visibleModule = ["holidays", "notifications"].includes(activeModule) ? "calendar" : moduleAllowed(activeModule) ? activeModule : "contacts";
+  useEffect(() => {
+    if (!designPreview.mounted) return;
+    setActiveModule((current) => designPreview.enabled
+      ? current === "contacts" ? "today" : current
+      : ["today", "more"].includes(current) ? "contacts" : current);
+  }, [designPreview.enabled, designPreview.mounted]);
   const [osintAvailable, setOsintAvailable] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -872,23 +892,24 @@ export default function Home() {
     window.location.assign(import.meta.env.MODE === "firebase-pages" ? import.meta.env.BASE_URL : user?.auth_source === "access" ? "/cdn-cgi/access/logout" : "/login");
   };
 
-  return <main className="admin-shell">
+  const currentModule = moduleDefinition(visibleModule);
+  return <main className={`admin-shell ${designPreview.enabled ? "design-v2" : ""}`}>
     <aside className="admin-sidebar">
-      <div className="admin-brand"><div className="brand-mark"><UserRound /></div><div><strong>ContactGraph</strong><span>Network admin</span></div></div>
+      <div className="admin-brand"><div className="brand-mark"><UserRound /></div><div><strong>ContactGraph</strong><span>{designPreview.enabled ? "Relationships, remembered" : "Network admin"}</span></div></div>
       <p className="navigation-label">Workspace</p>
-      <Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} onSelect={selectModule} />
+      {designPreview.enabled ? <RedesignedNavigation active={visibleModule} attention={calendarCount} onSelect={selectModule} /> : <Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} onSelect={selectModule} />}
       <div className="sidebar-status"><span className="status-dot" /><div><strong>{import.meta.env.MODE === "firebase-pages" ? "Shared database" : "Local database"}</strong><span>{contacts.length.toLocaleString()} records · {import.meta.env.MODE === "firebase-pages" ? "Firestore" : "DuckDB"}</span></div></div>
     </aside>
 
     <div className="admin-main">
       <header className="admin-header">
-        <Button className="lg:hidden" variant="outline" size="icon" onClick={() => setNavigationOpen(true)} aria-label="Open navigation"><Menu /></Button>
-        <div className="header-context"><span>{visibleModule === "contacts" ? "Contacts" : visibleModule === "graph" ? "Graph view" : visibleModule === "calendar" ? "Calendar" : visibleModule === "duplicates" ? "Duplication and sync errors" : visibleModule === "meetings" ? "Meetings" : visibleModule === "followups" ? "Follow-ups" : visibleModule === "canva" ? "Canva" : visibleModule === "osint" ? "OSINT updates" : "Settings"}</span><small>{offline ? "Offline copy" : user?.display_name || "Private workspace"}</small></div>
+        {!designPreview.enabled && <Button className="lg:hidden" variant="outline" size="icon" onClick={() => setNavigationOpen(true)} aria-label="Open navigation"><Menu /></Button>}
+        <div className="header-context"><span>{designPreview.enabled ? currentModule?.label ?? "ContactGraph" : visibleModule === "contacts" ? "Contacts" : visibleModule === "graph" ? "Graph view" : visibleModule === "calendar" ? "Calendar" : visibleModule === "duplicates" ? "Duplication and sync errors" : visibleModule === "meetings" ? "Meetings" : visibleModule === "followups" ? "Follow-ups" : visibleModule === "canva" ? "Canva" : visibleModule === "osint" ? "OSINT updates" : "Settings"}</span><small>{offline ? "Offline copy" : user?.display_name || "Private workspace"}</small></div>
         {visibleModule === "contacts" && <div className="header-search"><Search /><Input value={query} onChange={(event) => { setQuery(event.target.value); setVisibleCount(80); }} placeholder="Search people, companies, tags…" aria-label="Search contacts" />{query && <button onClick={() => { setQuery(""); setVisibleCount(80); }} aria-label="Clear search"><X /></button>}</div>}
         <OfflineStatus /><Button className="header-signout" size="sm" variant="outline" onClick={() => void signOut()}>Sign out</Button><div className="header-avatar">{user?.display_name?.slice(0, 2).toUpperCase() || "VK"}</div>
       </header>
 
-      {visibleModule === "contacts" ? <div className="contacts-module">
+      {visibleModule === "today" ? <TodayModule contacts={contacts} data={calendarData} onOpenContact={openContactById} onSelect={selectModule} /> : visibleModule === "more" ? <MoreModule osintAvailable={osintAvailable} onSelect={selectModule} /> : visibleModule === "contacts" ? <div className="contacts-module">
         <aside className="tag-sidebar overflow-y-auto"><div className="flex min-h-0 flex-1 flex-col"><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></div></aside>
         <section className="contacts-content">
           <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{selectedPositions.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updatePositions([])}><span className="truncate">Position: {selectedPositions.length === 1 ? selectedPositions[0] : `${selectedPositions.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedOrganizations.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updateOrganizations([])}><span className="truncate">Organization: {selectedOrganizations.length === 1 ? selectedOrganizations[0] : `${selectedOrganizations.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || can("contacts.merge")) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
@@ -923,7 +944,8 @@ export default function Home() {
       </div> : visibleModule === "graph" ? <ContactGraph contacts={contacts} onSelectContact={openContactById} /> : visibleModule === "calendar" ? <CalendarModule contacts={contacts} data={calendarData} month={calendarMonth} onMonthChange={setCalendarMonth} onOpenContact={openContactById} onOpenSettings={() => setActiveModule(can("settings.manage") ? "settings" : "account")} /> : visibleModule === "duplicates" ? <DuplicatesModule contacts={contacts} onOpenContact={openContactById} onMerge={mergeDuplicatePair} onDelete={deleteDuplicateContacts} /> : visibleModule === "meetings" ? <MeetingsModule contacts={contacts} /> : visibleModule === "followups" ? <FollowupsModule contacts={contacts} onOpenContact={openContactById} /> : visibleModule === "canva" ? <CanvaModule contacts={contacts} /> : visibleModule === "osint" ? <OsintModule contacts={contacts} onContactUpdated={(contact) => setContacts(current => current.map(item => item.id === contact.id ? contact as Contact : item))} /> : <SettingsArea section={visibleModule as SettingsSection} onSelect={setActiveModule} />}
     </div>
 
-    <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>
+    {!designPreview.enabled && <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>}
+    {designPreview.enabled && <RedesignedNavigation mobile active={visibleModule} attention={calendarCount} onSelect={selectModule} />}
     <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] overflow-y-auto border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Select one or more positions, organizations and tags.</SheetDescription></SheetHeader><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
     {visibleModule === "contacts" && <Button className="mobile-filter-button" onClick={() => setFiltersOpen(true)}><Tag />Filters{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Button>}
     <AlertDialog open={bulkAction !== null} onOpenChange={(open) => { if (!open && !bulkSaving) setBulkAction(null); }}>

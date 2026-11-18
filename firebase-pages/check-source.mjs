@@ -8,11 +8,11 @@ const allowed = (file) => file === ".gitignore"
   || file === "tsconfig.json" || file === "vite.firebase.config.ts"
   || file.startsWith(".github/workflows/") || file.startsWith("firebase-pages/") && firebaseFiles.has(file.slice("firebase-pages/".length))
   || file.startsWith("components/ui/") || file === "hooks/use-mobile.ts" || file === "lib/utils.ts"
-  || file.startsWith("app/") && (file.endsWith(".tsx") || file === "app/globals.css")
+  || file.startsWith("app/") && (file.endsWith(".tsx") || file.endsWith(".ts") || file === "app/globals.css" || file === "app/themes.css")
   || file.startsWith("public/") && ["favicon.svg", "window.svg", "globe.svg", "file.svg", "manifest.webmanifest", "service-worker.js"].includes(file.slice(7))
-  || file === "docs/firebase-pages-threat-model.md"
+  || ["docs/firebase-pages-threat-model.md", "docs/appearance-redesign-review.md", "docs/appearance-redesign-backlog.md", "docs/threat-notes/appearance-and-timeline-redesign-2026-11-18.md"].includes(file)
   || file === "vendor/shadcn-tailwind-4.13.0.css" || file === "vendor/shadcn-tailwind-4.13.0.LICENSE.md"
-  || file === "scripts/osint-search.mjs";
+  || ["scripts/osint-search.mjs", "scripts/contact-timeline.mjs", "scripts/contact-timeline.test.mjs"].includes(file);
 for (const file of tracked) {
   if (!allowed(file) || /(?:^|\/)(?:contacts\.json|photos|backups|\.env|.*\.duckdb)(?:\/|$)/i.test(file)) throw new Error(`Private or unexpected source file: ${file}`);
   if (file === "package-lock.json") continue;

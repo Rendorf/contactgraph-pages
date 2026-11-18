@@ -9,6 +9,7 @@ import { overlay, queueDelete, queuePut, syncPending } from "./offline";
 import { isFirestoreQuotaExceeded } from "./quota.mjs";
 import { hermesOsintFetch, hermesRequest } from "./hermes-api";
 import { deleteLocalRecording, deleteLocalRecordingsForMeeting, getLocalRecording, listLocalRecordings, saveLocalRecording } from "./recording-store";
+import { paginateTimeline, timelineEntries } from "../scripts/contact-timeline.mjs";
 
 type Json = Record<string, any>;
 type Item = Json & { id: string; revision?: number };
@@ -128,6 +129,16 @@ const remove = async (name: string, id: string) => {
   } catch (error) { if (networkFailure(error) && expected !== undefined) { await queueDelete(name, id, expected); return; } throw error; }
 };
 const readRows = async (name: string) => overlay(name, await readAll(name));
+const currentPermissions = async () => {
+  const { auth } = requireFirebase();
+  const email = auth.currentUser?.email?.toLowerCase();
+  if (!email) return [] as string[];
+  const member = await readOne("members", email);
+  if (!member?.active || typeof member.role_id !== "string") return [] as string[];
+  if (member.role_id === "owner") return ["*"];
+  const role = await readOne("roles", member.role_id);
+  return Array.isArray(role?.permissions) ? role.permissions.filter((permission): permission is string => typeof permission === "string") : [];
+};
 const todayBaku = () => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baku", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts().map((part) => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
@@ -463,6 +474,28 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
         }
       }
       return response({ contacts });
+    }
+    const timeline = /^\/api\/contacts\/([^/]+)\/timeline$/.exec(path);
+    if (timeline && method === "GET") {
+      const contactId = cleanId(timeline[1]);
+      if (!await readOne("contacts", contactId)) return response({ error: "Contact not found." }, 404);
+      const limitValue = url.searchParams.get("limit") || "30";
+      if (!/^\d{1,3}$/.test(limitValue) || Number(limitValue) < 1 || Number(limitValue) > 100) return response({ error: "Timeline limit must be from 1 to 100." }, 400);
+      const permissions = await currentPermissions();
+      const allowed = (permission: string) => permissions.includes("*") || permissions.includes(permission);
+      const [meetings, followups, messages, states] = await Promise.all([
+        allowed("meetings.view") ? readRows("meetings") : Promise.resolve([]),
+        allowed("followups.view") ? followupsView() : Promise.resolve({ actions: [] }),
+        allowed("drafts.view") ? readRows("holiday_messages") : Promise.resolve([]),
+        allowed("contacts.view") ? readAll("calendar_occurrence_states", "birthday") : Promise.resolve([]),
+      ]);
+      try {
+        const result = paginateTimeline(timelineEntries({ contactId, meetings, followups, messages, states }), Number(limitValue), url.searchParams.get("cursor"));
+        return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json", "cache-control": "private, no-store" } });
+      } catch (error) {
+        if (error instanceof Error && error.message === "Invalid timeline cursor.") return response({ error: error.message }, 400);
+        throw error;
+      }
     }
     if (path === "/api/contacts" && method === "POST") {
       const item = parse(options) as Item;

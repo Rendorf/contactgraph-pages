@@ -1,5 +1,6 @@
 "use client";
 import { ExternalDataNotice } from "./data-use-notice";
+import { AppearanceSettings } from "./appearance";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, KeyRound, LockKeyhole, PlugZap, Save, Settings2, Trash2 } from "lucide-react";
@@ -191,7 +192,7 @@ export function AccountSettingsModule() {
     } catch (error) { toast.error(error instanceof Error ? error.message : "Password could not be changed."); }
     finally { setSaving(false); }
   };
-  return <div className="settings-grid"><section className="settings-card settings-primary-card">
+  return <div className="settings-grid"><AppearanceSettings /><section className="settings-card settings-primary-card">
     <header><div className="settings-icon"><LockKeyhole /></div><div><h2>Change password</h2><p>Update your own ContactGraph login.</p></div></header>
     <div className="settings-card-body"><form className="account-password-form" onSubmit={event => void changePassword(event)}>
       <label>Current password<Input type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} required /></label>

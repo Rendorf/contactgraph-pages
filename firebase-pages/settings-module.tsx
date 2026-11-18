@@ -1,4 +1,5 @@
 import { ExternalDataNotice } from "../app/data-use-notice";
+import { AppearanceSettings } from "../app/appearance";
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, runTransaction } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
@@ -164,5 +165,5 @@ export function AccountSettingsModule() {
     }
     window.location.assign(import.meta.env.BASE_URL);
   };
-  return <div className="settings-content"><div className="settings-grid"><section className="settings-card"><div className="settings-card-body"><h2>Account</h2><p>{user?.display_name} · {user?.username}</p><p>Role: {user?.role_id}</p><Button variant="outline" onClick={() => { void logout().catch((error) => toast.error(error instanceof Error ? error.message : "Could not sign out")); }}>Sign out</Button></div></section><KeepSignedInCard /><TrustedDeviceCard /></div></div>;
+  return <div className="settings-content"><div className="settings-grid"><AppearanceSettings /><section className="settings-card"><div className="settings-card-body"><h2>Account</h2><p>{user?.display_name} · {user?.username}</p><p>Role: {user?.role_id}</p><Button variant="outline" onClick={() => { void logout().catch((error) => toast.error(error instanceof Error ? error.message : "Could not sign out")); }}>Sign out</Button></div></section><KeepSignedInCard /><TrustedDeviceCard /></div></div>;
 }

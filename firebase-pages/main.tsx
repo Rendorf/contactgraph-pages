@@ -4,6 +4,7 @@ import "../app/globals.css";
 import { AuthProvider } from "./auth-context";
 import { Toaster } from "@/components/ui/sonner";
 import { installFirebaseApi } from "./api";
+import { AppearanceProvider } from "../app/appearance";
 
 if (window.location.protocol === "http:" && window.location.hostname === "contacts.vusalkhalilov.com") {
   window.location.replace("https://contactgraph-vusal-2026.web.app/");
@@ -11,7 +12,7 @@ if (window.location.protocol === "http:" && window.location.hostname === "contac
   installFirebaseApi();
   const root = document.getElementById("root");
   if (!root) throw new Error("Missing application root.");
-  createRoot(root).render(<AuthProvider><Home /><Toaster position="top-right" richColors closeButton duration={6000} /></AuthProvider>);
+  createRoot(root).render(<AppearanceProvider><AuthProvider><Home /><Toaster position="top-right" richColors closeButton duration={6000} /></AuthProvider></AppearanceProvider>);
   if ("serviceWorker" in navigator) window.addEventListener("load", () => {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}service-worker.js`).catch(() => undefined);
   });

@@ -67,6 +67,14 @@ next-env.d.ts
 !/app/
 /app/*
 !/app/page.tsx
+!/app/layout.tsx
+!/app/appearance.tsx
+!/app/themes.css
+!/app/module-registry.ts
+!/app/redesigned-navigation.tsx
+!/app/today-module.tsx
+!/app/more-module.tsx
+!/app/contact-timeline.tsx
 !/app/contact-graph.tsx
 !/app/holiday-module.tsx
 !/app/canva-module.tsx
@@ -112,6 +120,10 @@ next-env.d.ts
 !/docs/
 /docs/*
 !/docs/firebase-pages-threat-model.md
+!/docs/appearance-redesign-review.md
+!/docs/appearance-redesign-backlog.md
+!/docs/threat-notes/
+!/docs/threat-notes/appearance-and-timeline-redesign-2026-11-18.md
 !/package.json
 !/package-lock.json
 !/postcss.config.mjs
@@ -124,6 +136,8 @@ next-env.d.ts
 !/scripts/
 /scripts/*
 !/scripts/osint-search.mjs
+!/scripts/contact-timeline.mjs
+!/scripts/contact-timeline.test.mjs
 
 # Added 2026-11-08: never publish file-sync conflict copies or macOS metadata.
 *.sync-conflict-*
