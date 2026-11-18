@@ -8,6 +8,7 @@
     { "name": "holiday_posts", "optional": true },
     { "name": "canvases" },
     { "name": "meetings" },
+    { "name": "meeting_recordings", "optional": true },
     { "name": "followup_actions" },
     { "name": "followup_settings" },
     { "name": "calendar_occurrence_states", "optional": true },

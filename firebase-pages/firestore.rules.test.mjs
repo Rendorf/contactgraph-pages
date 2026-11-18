@@ -3,7 +3,8 @@ import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebas
 import { test, after } from "node:test";
 
 const rules = readFileSync(new URL("./firestore.rules", import.meta.url), "utf8");
-const env = await initializeTestEnvironment({ projectId: "demo-contactgraph", firestore: { rules } });
+const storageRules = readFileSync(new URL("./storage.rules", import.meta.url), "utf8");
+const env = await initializeTestEnvironment({ projectId: "demo-contactgraph", firestore: { rules }, storage: { rules: storageRules } });
 after(async () => { await env.cleanup(); });
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore();
@@ -74,6 +75,27 @@ test("private photos and unknown collections stay closed", async () => {
   await assertFails(assistant.doc("photo_chunks/person-1_0").set({ id: "person-1_0", contact_id: "person-1", index: 0, total: 1, mime: "text/plain", data: "AA==" }));
   await assertSucceeds(assistant.doc("photo_chunks/person-1_0").set({ id: "person-1_0", contact_id: "person-1", index: 0, total: 1, mime: "image/jpeg", sha256: "0".repeat(64), data: "AA==" }));
   await assertFails(owner.doc("unexpected/private").get());
+});
+
+test("meeting recordings require a meeting, valid metadata, and meeting permissions", async () => {
+  const meeting = { id: "meeting-1", contact_id: "person-1", contact_ids: ["person-1"], date: "2026-11-18", insights: "", revision: 1, updated_at: "2026-11-18T10:00:00Z", updated_by: "owner-uid" };
+  await assertSucceeds(owner.doc("meetings/meeting-1").set(meeting));
+  const recording = { id: "recording-1", meeting_id: "meeting-1", duration_ms: 1000, mime_type: "audio/webm", size_bytes: 4,
+    sha256: "a".repeat(64), storage_name: "meeting-recordings/meeting-1/recording-1.webm", transcript: "", transcript_status: "pending",
+    transcript_language: "", transcript_model: "", revision: 1, updated_at: "2026-11-18T10:00:00Z", updated_by: "owner-uid" };
+  await assertFails(assistant.doc("meeting_recordings/recording-1").set({ ...recording, updated_by: "assistant-uid" }));
+  await assertFails(owner.doc("meeting_recordings/missing").set({ ...recording, id: "missing", meeting_id: "missing", storage_name: "meeting-recordings/missing/missing.webm" }));
+  await assertFails(owner.doc("meeting_recordings/recording-1").set({ ...recording, size_bytes: 250000001 }));
+  await assertSucceeds(owner.doc("meeting_recordings/recording-1").set(recording));
+  await assertSucceeds(assistant.doc("meeting_recordings/recording-1").get());
+
+  const metadata = { contentType: "audio/webm", customMetadata: { meetingId: "meeting-1", recordingId: "recording-1", sha256: "a".repeat(64) } };
+  const ownerFile = owner.app.storage().ref("meeting-recordings/meeting-1/recording-1.webm");
+  await assertFails(env.unauthenticatedContext().storage().ref(ownerFile.fullPath).put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
+  await assertFails(assistant.app.storage().ref(ownerFile.fullPath).put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
+  await assertSucceeds(ownerFile.put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
+  await assertSucceeds(assistant.app.storage().ref(ownerFile.fullPath).getDownloadURL());
+  await assertFails(owner.app.storage().ref("meeting-recordings/meeting-1/bad.webm").put(new Uint8Array([1]), { contentType: "text/plain", customMetadata: { meetingId: "meeting-1", recordingId: "bad", sha256: "b".repeat(64) } }));
 });
 
 test("merge permission cannot delete contacts; an authorized merge is atomic", async () => {

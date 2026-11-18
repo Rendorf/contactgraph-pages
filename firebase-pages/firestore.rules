@@ -97,6 +97,21 @@ service cloud.firestore {
       allow update: if allowed('meetings.edit') && validUpdate(id);
       allow delete: if allowed('meetings.delete');
     }
+    match /meeting_recordings/{id} {
+      allow read: if allowed('meetings.view');
+      allow create: if allowed('meetings.create') && validRecord(id) && request.resource.data.revision == 1
+        && request.resource.data.meeting_id is string
+        && exists(/databases/$(database)/documents/meetings/$(request.resource.data.meeting_id))
+        && request.resource.data.duration_ms is int && request.resource.data.duration_ms > 0 && request.resource.data.duration_ms <= 14400000
+        && request.resource.data.size_bytes is int && request.resource.data.size_bytes > 0 && request.resource.data.size_bytes <= 250000000
+        && request.resource.data.mime_type in ['audio/webm', 'audio/mp4', 'audio/ogg']
+        && request.resource.data.sha256 is string && request.resource.data.sha256.matches('^[0-9a-f]{64}$')
+        && request.resource.data.storage_name == 'meeting-recordings/' + request.resource.data.meeting_id + '/' + id
+          + (request.resource.data.mime_type == 'audio/webm' ? '.webm' : request.resource.data.mime_type == 'audio/mp4' ? '.m4a' : '.ogg');
+      allow update: if allowed('meetings.edit') && validUpdate(id)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['transcript', 'transcript_status', 'transcript_language', 'transcript_model', 'revision', 'updated_at', 'updated_by']);
+      allow delete: if allowed('meetings.edit') || allowed('meetings.delete');
+    }
     match /followup_actions/{id} {
       allow read: if allowed('followups.view');
       allow create: if allowed('followups.manage') && validRecord(id) && request.resource.data.revision == 1

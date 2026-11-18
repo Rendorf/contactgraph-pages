@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function member() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && firestore.exists(/databases/(default)/documents/members/$(request.auth.token.email))
+        && firestore.get(/databases/(default)/documents/members/$(request.auth.token.email)).data.active == true;
+    }
+    function allowed(permission) {
+      let memberRecord = firestore.get(/databases/(default)/documents/members/$(request.auth.token.email)).data;
+      return member() && (memberRecord.role_id == 'owner'
+        || permission in firestore.get(/databases/(default)/documents/roles/$(memberRecord.role_id)).data.permissions);
+    }
+    match /meeting-recordings/{meetingId}/{fileName} {
+      allow read: if allowed('meetings.view');
+      allow create: if allowed('meetings.create')
+        && request.resource.size > 0 && request.resource.size <= 250000000
+        && request.resource.contentType in ['audio/webm', 'audio/mp4', 'audio/ogg']
+        && request.resource.metadata.meetingId == meetingId
+        && request.resource.metadata.recordingId + (request.resource.contentType == 'audio/webm' ? '.webm' : request.resource.contentType == 'audio/mp4' ? '.m4a' : '.ogg') == fileName
+        && request.resource.metadata.sha256.matches('^[0-9a-f]{64}$')
+        && firestore.exists(/databases/(default)/documents/meeting_recordings/$(request.resource.metadata.recordingId));
+      allow update: if false;
+      allow delete: if allowed('meetings.edit') || allowed('meetings.delete');
+    }
+  }
+}

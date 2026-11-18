@@ -2,10 +2,13 @@ import { validDate, occurrenceId } from "../app/calendar-model";
 import { validateKanban } from "../app/canvas-kanban";
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
 import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
+import { requireFirebaseStorage } from "./firebase";
+import { deleteObject, getBlob, ref, uploadBytes } from "firebase/storage";
 import permissionModules from "./permission-catalog.json";
 import { overlay, queueDelete, queuePut, syncPending } from "./offline";
 import { isFirestoreQuotaExceeded } from "./quota.mjs";
 import { hermesOsintFetch, hermesRequest } from "./hermes-api";
+import { deleteLocalRecording, deleteLocalRecordingsForMeeting, getLocalRecording, listLocalRecordings, saveLocalRecording } from "./recording-store";
 
 type Json = Record<string, any>;
 type Item = Json & { id: string; revision?: number };
@@ -21,6 +24,21 @@ const errorResponse = (error: unknown) => isFirestoreQuotaExceeded(error)
 const cleanId = (value: string) => {
   if (!value || value.length > 200 || value.includes("/") || value === "." || value === "..") throw new Error("Invalid record ID.");
   return value;
+};
+const recordingTypes = new Map([["audio/webm", ".webm"], ["audio/mp4", ".m4a"], ["audio/ogg", ".ogg"]]);
+const localRecordingUid = () => {
+  const { auth } = requireFirebase();
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Sign in before saving a recording.");
+  return uid;
+};
+const localRecordingItem = (item: Item): Item => ({ ...item, storage_backend: "device", pending_sync: true });
+const sha256 = async (blob: Blob) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()))].map((value) => value.toString(16).padStart(2, "0")).join("");
+const validRecordingMagic = async (blob: Blob, mime: string) => {
+  const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+  return mime === "audio/webm" ? bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3
+    : mime === "audio/ogg" ? new TextDecoder().decode(bytes.slice(0, 4)) === "OggS"
+    : mime === "audio/mp4" && bytes.length >= 8 && new TextDecoder().decode(bytes.slice(4, 8)) === "ftyp";
 };
 const nextMessageSequence = () => {
   const values = crypto.getRandomValues(new Uint32Array(2));
@@ -497,7 +515,41 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
       const contactId = url.searchParams.get("contact_id");
       return response({ meetings: (await readRows("meetings")).filter((item) => !contactId || item.contact_id === contactId || item.contact_ids?.includes(contactId)).sort((a, b) => String(b.date).localeCompare(String(a.date))) });
     }
-    if (path === "/api/meetings" && method === "POST") { const item = parse(options) as Item; item.id ||= crypto.randomUUID(); if (!Array.isArray(item.contact_ids) || !item.contact_ids.length || typeof item.insights !== "string" || !item.insights.trim()) throw new Error("Choose a contact and add meeting notes."); return response({ meeting: await put("meetings", item, true) }); }
+    if (path === "/api/meetings" && method === "POST") { const item = parse(options) as Item; item.id ||= crypto.randomUUID(); if (!Array.isArray(item.contact_ids) || !item.contact_ids.length || typeof item.insights !== "string" || item.insights.length > 100000) throw new Error("Choose a contact and enter valid meeting notes."); return response({ meeting: await put("meetings", item, true) }); }
+    if (path === "/api/meeting-recordings" && method === "GET") {
+      const meetingId = url.searchParams.get("meeting_id");
+      const remote = await readRows("meeting_recordings");
+      const local = isTrustedDevice() ? (await listLocalRecordings(localRecordingUid())).map((row) => localRecordingItem(row.item as Item)) : [];
+      const merged = new Map(remote.map((item) => [item.id, item]));
+      for (const item of local) if (!merged.has(item.id)) merged.set(item.id, item);
+      return response({ recordings: [...merged.values()].filter((item) => !meetingId || item.meeting_id === meetingId).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))) });
+    }
+    const recordingUpload = /^\/api\/meetings\/([^/]+)\/recordings$/.exec(path);
+    if (recordingUpload && method === "POST") {
+      online();
+      const meetingId = cleanId(recordingUpload[1]);
+      if (!await readOne("meetings", meetingId)) throw new Error("Save the meeting before adding a recording.");
+      const blob = options?.body;
+      if (!(blob instanceof Blob) || blob.size < 1 || blob.size > 250_000_000) throw new Error("Recording must be between 1 byte and 250 MB.");
+      const mime = blob.type.split(";", 1)[0].toLowerCase();
+      const extension = recordingTypes.get(mime);
+      if (!extension || !await validRecordingMagic(blob, mime)) throw new Error("Use a valid WebM, MP4, or Ogg audio recording.");
+      const duration = Number(new Headers(options?.headers).get("x-recording-duration-ms") || 0);
+      if (!Number.isInteger(duration) || duration < 1 || duration > 14_400_000) throw new Error("Recording duration must be no more than four hours.");
+      const id = crypto.randomUUID();
+      const storage_name = `meeting-recordings/${meetingId}/${id}${extension}`;
+      const timestamp = new Date().toISOString();
+      const item: Item = { id, meeting_id: meetingId, duration_ms: duration, mime_type: mime, size_bytes: blob.size, sha256: await sha256(blob), storage_name, transcript: "", transcript_status: "pending", transcript_language: "", transcript_model: "", created_at: timestamp, updated_at: timestamp, revision: 0 };
+      const saved = await put("meeting_recordings", item, true);
+      try { await uploadBytes(ref(requireFirebaseStorage(), storage_name), blob, { contentType: mime, customMetadata: { recordingId: id, meetingId, sha256: item.sha256 } }); }
+      catch (error) {
+        await remove("meeting_recordings", id).catch(() => undefined);
+        if (!isTrustedDevice()) throw new Error("Cloud audio storage is unavailable. Enable trusted-device offline access in Settings to keep this recording safely on this device.", { cause: error });
+        await saveLocalRecording(localRecordingUid(), item, blob);
+        return response({ recording: localRecordingItem(item), warning: "Cloud audio storage is unavailable. This recording is saved only on this trusted device and is waiting to sync." }, 202);
+      }
+      return response({ recording: saved }, 201);
+    }
     if (path === "/api/contact-links" && method === "GET") {
       const contactId = url.searchParams.get("contact_id");
       return response({ links: (await readRows("contact_links")).filter((item) => !contactId || item.contact_a === contactId || item.contact_b === contactId).sort((a, b) => a.id.localeCompare(b.id)) });
@@ -514,8 +566,54 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
     }
     const meeting = /^\/api\/meetings\/([^/]+)$/.exec(path);
     if (meeting) {
-      if (method === "DELETE") { await remove("meetings", meeting[1]); return response({ deleted: true }); }
+      if (method === "DELETE") {
+        for (const recording of (await readRows("meeting_recordings")).filter((item) => item.meeting_id === meeting[1])) {
+          await deleteObject(ref(requireFirebaseStorage(), recording.storage_name)).catch(() => undefined);
+          await remove("meeting_recordings", recording.id);
+        }
+        if (isTrustedDevice()) await deleteLocalRecordingsForMeeting(localRecordingUid(), meeting[1]);
+        await remove("meetings", meeting[1]); return response({ deleted: true });
+      }
       if (method === "PUT") { const item = parse(options) as Item; if (item.id !== meeting[1]) throw new Error("Meeting ID mismatch."); return response({ meeting: await put("meetings", item, false) }); }
+    }
+    const recording = /^\/api\/meeting-recordings\/([^/]+)(?:\/(audio|transcribe|upload))?$/.exec(path);
+    if (recording) {
+      const id = cleanId(recording[1]);
+      const local = isTrustedDevice() ? await getLocalRecording(localRecordingUid(), id) : undefined;
+      const item = local ? localRecordingItem(local.item as Item) : await readOne("meeting_recordings", id);
+      if (!item) return response({ error: "Recording not found." }, 404);
+      const action = recording[2] || "";
+      if (method === "GET" && action === "audio") {
+        const blob = local?.blob ?? await getBlob(ref(requireFirebaseStorage(), item.storage_name), 250_000_000);
+        if (blob.size !== item.size_bytes || await sha256(blob) !== item.sha256) throw new Error("Recording integrity verification failed.");
+        return new Response(blob, { status: 200, headers: { "content-type": item.mime_type, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
+      }
+      if (method === "POST" && action === "transcribe") return response({ error: "Transcription is pending until Hermes has synchronized this recording." }, 409);
+      if (method === "POST" && action === "upload" && local) {
+        const persisted = Object.fromEntries(Object.entries(local.item).filter(([key]) => key !== "storage_backend" && key !== "pending_sync")) as Item;
+        const saved = await put("meeting_recordings", persisted, true);
+        try { await uploadBytes(ref(requireFirebaseStorage(), String(persisted.storage_name)), local.blob, { contentType: String(persisted.mime_type), customMetadata: { recordingId: id, meetingId: String(persisted.meeting_id), sha256: String(persisted.sha256) } }); }
+        catch (error) { await remove("meeting_recordings", id).catch(() => undefined); throw new Error("Cloud audio storage is still unavailable. The recording remains safe on this device.", { cause: error }); }
+        await deleteLocalRecording(localRecordingUid(), id);
+        return response({ recording: saved });
+      }
+      if (method === "PUT" && !action) {
+        const body = parse(options);
+        if (typeof body.transcript !== "string" || body.transcript.length > 500_000) throw new Error("Invalid transcript.");
+        if (local) {
+          const original = local.item as Item;
+          const updated: Item = { ...original, transcript: body.transcript.trim(), transcript_status: body.transcript.trim() ? "ready" : "pending", updated_at: new Date().toISOString(), revision: Number(original.revision ?? 0) + 1 };
+          await saveLocalRecording(localRecordingUid(), updated, local.blob);
+          return response({ recording: localRecordingItem(updated) });
+        }
+        return response({ recording: await put("meeting_recordings", { ...item, transcript: body.transcript.trim(), transcript_status: body.transcript.trim() ? "ready" : "pending", revision: body.revision ?? item.revision }, false) });
+      }
+      if (method === "DELETE" && !action) {
+        if (local) { await deleteLocalRecording(localRecordingUid(), item.id); return response({ id: item.id, deleted: true }); }
+        await deleteObject(ref(requireFirebaseStorage(), item.storage_name)).catch(() => undefined);
+        await remove("meeting_recordings", item.id);
+        return response({ id: item.id, deleted: true });
+      }
     }
     if (path === "/api/canvases" && method === "GET") return response({ canvases: (await readRows("canvases")).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))) });
     if (path === "/api/canvases" && method === "POST") { const body = parse(options); const item: Item = { id: crypto.randomUUID(), title: String(body.title ?? "").trim(), nodes: [], created_at: new Date().toISOString() }; if (!item.title) throw new Error("Enter a canvas title."); return response({ canvas: await put("canvases", item, true) }); }

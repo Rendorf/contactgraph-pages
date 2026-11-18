@@ -18,7 +18,7 @@ import duckdb
 APP_ROOT = Path(__file__).resolve().parents[1]
 ROOT = APP_ROOT.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from contactdb import list_canvases, list_contacts, list_holiday_messages, list_holidays, list_meetings  # noqa: E402
+from contactdb import list_canvases, list_contacts, list_holiday_messages, list_holidays, list_meeting_recordings, list_meetings  # noqa: E402
 import contactdb  # noqa: E402
 from calendar_states import list_states  # noqa: E402
 import contact_links  # noqa: E402
@@ -65,6 +65,7 @@ def export(database: Path, output: Path, osint_database: Path | None = None) -> 
             "holiday_posts": posts,
             "canvases": list_canvases(connection),
             "meetings": list_meetings(connection),
+            "meeting_recordings": list_meeting_recordings(connection),
             "followup_actions": actions,
             "followup_settings": settings,
             "calendar_occurrence_states": list_states(connection),
