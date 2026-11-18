@@ -1,4 +1,4 @@
-const CACHE = "contactgraph-shell-v1";
+const CACHE = "contactgraph-shell-v2";
 const root = new URL(self.registration.scope);
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
@@ -21,7 +21,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== root.origin || !url.href.startsWith(root.href) || url.pathname.includes("/api/")) return;
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then((result) => { const copy = result.clone(); void caches.open(CACHE).then((cache) => cache.put(root.href, copy)); return result; }).catch(() => caches.match(root.href)));
+    // Revalidate the page on every open: hosts let browsers keep it for up to an hour,
+    // which would keep a home-screen app on an old version after a release.
+    event.respondWith(fetch(request, { cache: "no-cache" }).then((result) => { const copy = result.clone(); void caches.open(CACHE).then((cache) => cache.put(root.href, copy)); return result; }).catch(() => caches.match(root.href)));
     return;
   }
   if (/\.(?:js|css|svg|webmanifest)$/.test(url.pathname)) {
