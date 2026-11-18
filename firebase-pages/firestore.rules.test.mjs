@@ -20,7 +20,9 @@ await env.withSecurityRulesDisabled(async (context) => {
   await db.doc("contacts/person-1").set({ id: "person-1", name: "Person One", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [] });
   await db.doc("contacts/person-2").set({ id: "person-2", name: "Person Two", revision: 1, updated_at: "2026-10-27T00:00:00Z", updated_by: "migration", labels: [], private_note: "Keep this" });
 });
-const google = (email, uid) => env.authenticatedContext(uid, { email, email_verified: true, firebase: { sign_in_provider: "google.com" } }).firestore();
+const googleClaims = (email) => ({ email, email_verified: true, firebase: { sign_in_provider: "google.com" } });
+const google = (email, uid) => env.authenticatedContext(uid, googleClaims(email)).firestore();
+const googleStorage = (email, uid) => env.authenticatedContext(uid, googleClaims(email)).storage("demo-contactgraph.appspot.com");
 const owner = google("owner@example.com", "owner-uid");
 const assistant = google("assistant@example.com", "assistant-uid");
 const tagger = google("tagger@example.com", "tagger-uid");
@@ -90,12 +92,14 @@ test("meeting recordings require a meeting, valid metadata, and meeting permissi
   await assertSucceeds(assistant.doc("meeting_recordings/recording-1").get());
 
   const metadata = { contentType: "audio/webm", customMetadata: { meetingId: "meeting-1", recordingId: "recording-1", sha256: "a".repeat(64) } };
-  const ownerFile = owner.app.storage().ref("meeting-recordings/meeting-1/recording-1.webm");
-  await assertFails(env.unauthenticatedContext().storage().ref(ownerFile.fullPath).put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
-  await assertFails(assistant.app.storage().ref(ownerFile.fullPath).put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
+  const ownerFiles = googleStorage("owner@example.com", "owner-uid");
+  const assistantFiles = googleStorage("assistant@example.com", "assistant-uid");
+  const ownerFile = ownerFiles.ref("meeting-recordings/meeting-1/recording-1.webm");
+  await assertFails(env.unauthenticatedContext().storage("demo-contactgraph.appspot.com").ref(ownerFile.fullPath).put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
+  await assertFails(assistantFiles.ref(ownerFile.fullPath).put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
   await assertSucceeds(ownerFile.put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
-  await assertSucceeds(assistant.app.storage().ref(ownerFile.fullPath).getDownloadURL());
-  await assertFails(owner.app.storage().ref("meeting-recordings/meeting-1/bad.webm").put(new Uint8Array([1]), { contentType: "text/plain", customMetadata: { meetingId: "meeting-1", recordingId: "bad", sha256: "b".repeat(64) } }));
+  await assertSucceeds(assistantFiles.ref(ownerFile.fullPath).getDownloadURL());
+  await assertFails(ownerFiles.ref("meeting-recordings/meeting-1/bad.webm").put(new Uint8Array([1]), { contentType: "text/plain", customMetadata: { meetingId: "meeting-1", recordingId: "bad", sha256: "b".repeat(64) } }));
 });
 
 test("merge permission cannot delete contacts; an authorized merge is atomic", async () => {
