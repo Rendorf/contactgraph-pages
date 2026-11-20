@@ -6,7 +6,7 @@ Date: 2026-11-18
 
 - Contact details, meeting notes, follow-up state, saved messages, and occasion outcomes are private relationship data.
 - The DuckDB HTTP service and Firestore security rules remain authorization boundaries. UI visibility is not authorization.
-- Theme and redesign-preview preferences are presentation-only values stored in browser local storage and are not synchronized.
+- Theme and temporary legacy-interface preferences are presentation-only values stored in browser local storage and are not synchronized.
 
 ## Controls implemented
 

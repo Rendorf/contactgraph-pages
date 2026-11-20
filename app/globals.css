@@ -1134,7 +1134,7 @@ button.small-tag:hover { background:#dff0ef; color:#0b626d; }
 .kanban-column.is-dragging-column { opacity: .55; }
 .kanban-column.is-column-drop-target { outline: 2px solid #2563eb; outline-offset: -2px; }
 
-/* Relationship-first design preview. All colors are semantic so appearance regimes
+/* Relationship-first design foundation. All colors are semantic so appearance regimes
    can be switched without changing component markup. */
 .design-v2 { min-height:100dvh; background:var(--background); color:var(--foreground); }
 .design-v2 .admin-sidebar { background:var(--sidebar); color:var(--sidebar-foreground); }
@@ -1252,3 +1252,161 @@ html[data-theme="minimal"] .design-v2 .today-hero,html[data-theme="minimal"] .de
 .timeline-list article > div { display:flex; align-items:start; justify-content:space-between; gap:.75rem; }.timeline-list article strong { font-size:.78rem; }.timeline-list article time { flex:none; color:var(--text-subtle); font-size:.62rem; }
 .timeline-list article p { display:-webkit-box; overflow:hidden; margin:.35rem 0; color:var(--foreground); font-size:.73rem; line-height:1.5; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:4; }.timeline-list article small { color:var(--text-subtle); font-size:.61rem; text-transform:capitalize; }
 .timeline-state { display:grid; min-height:14rem; place-items:center; align-content:center; gap:.7rem; border:1px dashed var(--border); border-radius:var(--radius); color:var(--text-subtle); text-align:center; font-size:.75rem; }
+
+/* Applied relationship-first system -------------------------------------------------
+   The redesign is now the default experience. These rules deliberately sit after the
+   legacy stylesheet so every daily-use module inherits the same semantic surfaces,
+   spacing, hierarchy and theme behavior without changing its data workflows. */
+.design-v2 .admin-main {
+  min-height:100dvh;
+  background:
+    radial-gradient(circle at 88% 2%,color-mix(in srgb,var(--brand-soft) 72%,transparent),transparent 26rem),
+    var(--background);
+}
+.design-v2 .admin-sidebar { padding:1.4rem 1rem; box-shadow:8px 0 34px rgb(var(--shadow-color) / 8%); }
+.design-v2 .admin-brand { padding:.25rem .5rem 2.2rem; }
+.design-v2 .admin-brand .brand-mark { width:2.8rem; height:2.8rem; border-radius:calc(var(--radius) + .05rem); }
+.design-v2 .admin-brand strong { font-size:1.02rem; }
+.design-v2 .admin-header { height:4.75rem; padding-inline:clamp(1rem,2.4vw,2.3rem); }
+.design-v2 .header-context span { font-size:.92rem; }
+.design-v2 .header-avatar { width:2.35rem; height:2.35rem; border-radius:50%; }
+.design-v2 .header-search { max-width:46rem; }
+.design-v2 .header-search input { height:2.75rem; border-radius:999px; padding-left:2.65rem; }
+
+.design-v2 .contacts-content,
+.design-v2 .graph-module,
+.design-v2 .calendar-module,
+.design-v2 .meetings-module,
+.design-v2 .followups-module,
+.design-v2 .duplicates-module,
+.design-v2 .canva-module,
+.design-v2 .osint-module,
+.design-v2 .settings-module { color:var(--foreground); }
+.design-v2 .module-heading,
+.design-v2 .graph-toolbar,
+.design-v2 .calendar-module > div:first-child {
+  align-items:center;
+  margin-bottom:1.6rem;
+  border:1px solid var(--border);
+  border-radius:calc(var(--radius) + .5rem);
+  background:linear-gradient(135deg,var(--surface-raised),color-mix(in srgb,var(--brand-soft) 38%,var(--surface-raised)));
+  padding:clamp(1.15rem,2.5vw,1.8rem);
+  box-shadow:0 14px 38px rgb(var(--shadow-color) / 6%);
+}
+.design-v2 .module-title { color:var(--foreground); font-size:clamp(1.85rem,3vw,2.45rem); font-weight:770; letter-spacing:-.055em; }
+.design-v2 .module-subtitle,.design-v2 .eyebrow { color:var(--text-subtle); }
+.design-v2 .eyebrow { margin-bottom:.4rem; }
+
+.design-v2 .tag-sidebar { top:4.75rem; height:calc(100vh - 4.75rem); border-color:var(--border); background:color-mix(in srgb,var(--surface-subtle) 88%,var(--background)); padding:1.35rem; }
+.design-v2 .filter-row { color:var(--text-subtle); }
+.design-v2 .filter-row:hover { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .filter-row.active { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .check-box { border-color:var(--input); background:var(--surface-raised); }
+.design-v2 .filter-row.active .check-box { border-color:var(--brand); background:var(--brand); }
+.design-v2 .contact-alphabet { top:5.1rem; border-color:var(--border); border-radius:999px; background:color-mix(in srgb,var(--surface-raised) 92%,transparent); padding:.45rem; box-shadow:0 10px 28px rgb(var(--shadow-color) / 6%); }
+.design-v2 .contact-alphabet button { border-radius:999px; color:var(--text-subtle); }
+.design-v2 .contact-alphabet button:hover { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .contact-alphabet button.active { background:var(--brand); color:var(--primary-foreground); box-shadow:none; }
+.design-v2 .contact-grid { gap:1rem; }
+.design-v2 .contact-card { border-color:var(--border); border-radius:calc(var(--radius) + .35rem); background:var(--card); padding:1.15rem; box-shadow:0 8px 26px rgb(var(--shadow-color) / 5%); }
+.design-v2 .contact-card:hover { border-color:color-mix(in srgb,var(--brand) 48%,var(--border)); box-shadow:0 16px 38px rgb(var(--shadow-color) / 10%); transform:translateY(-3px); }
+.design-v2 .contact-card.selected { border-color:var(--brand); background:color-mix(in srgb,var(--brand-soft) 45%,var(--card)); }
+.design-v2 .contact-card-main h2 { color:var(--foreground); font-size:.96rem; }
+.design-v2 .contact-card-main p,.design-v2 .contact-card-details { color:var(--text-subtle); }
+.design-v2 .avatar { width:3rem; height:3rem; border-radius:50%; background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .small-tag,.design-v2 .tag-pill { border-color:var(--border); background:var(--surface-subtle); color:var(--text-subtle); }
+.design-v2 button.small-tag:hover,.design-v2 .tag-pill:hover { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .empty-state { border-color:var(--border); background:color-mix(in srgb,var(--surface-raised) 70%,transparent); }
+.design-v2 .empty-state p { color:var(--text-subtle); }
+
+.design-v2 .graph-mode-switch { border-color:var(--border); border-radius:999px; background:var(--surface-subtle); padding:.28rem; }
+.design-v2 .graph-mode-switch button { border-radius:999px; color:var(--text-subtle); }
+.design-v2 .graph-mode-switch button.active { background:var(--surface-raised); color:var(--brand-strong); box-shadow:0 3px 12px rgb(var(--shadow-color) / 8%); }
+.design-v2 .graph-summary span,.design-v2 .graph-distribution,.design-v2 .graph-people-list,.design-v2 .graph-canvas,.design-v2 .all-connections-inspector {
+  border-color:var(--border); background:var(--surface-raised); color:var(--foreground); box-shadow:0 10px 30px rgb(var(--shadow-color) / 5%);
+}
+.design-v2 .graph-canvas { background:radial-gradient(circle at 50% 45%,var(--surface-raised),var(--surface-subtle)); }
+.design-v2 .graph-distribution-heading,.design-v2 .graph-people-header { border-color:var(--border); }
+.design-v2 .graph-distribution-heading h2,.design-v2 .graph-people-header strong,.design-v2 .graph-list-copy strong { color:var(--foreground); }
+.design-v2 .graph-distribution-heading p,.design-v2 .graph-people-header span,.design-v2 .graph-list-copy small,.design-v2 .graph-note { color:var(--text-subtle); }
+.design-v2 .graph-distribution-list button { color:var(--foreground); }
+.design-v2 .graph-distribution-list button:hover,.design-v2 .graph-distribution-list button.active,.design-v2 .graph-people-scroll button:hover { background:var(--brand-soft); }
+
+.design-v2 .calendar-module { max-width:90rem; margin-inline:auto; padding:clamp(1rem,2.4vw,2.25rem); }
+.design-v2 .calendar-module .bg-white { border-color:var(--border)!important; background:var(--surface-raised)!important; color:var(--foreground)!important; box-shadow:0 10px 30px rgb(var(--shadow-color) / 5%); }
+.design-v2 .calendar-module .bg-slate-50 { border-color:var(--border)!important; background:var(--surface-subtle)!important; color:var(--foreground)!important; }
+.design-v2 .calendar-module .text-slate-500 { color:var(--text-subtle)!important; }
+.design-v2 .calendar-module [data-slot="calendar"] { color:var(--foreground); }
+.design-v2 .calendar-module [data-selected-single="true"] { background:var(--brand)!important; color:var(--primary-foreground)!important; }
+
+.design-v2 .meeting-count,.design-v2 .meeting-editor,.design-v2 .meeting-list-section,
+.design-v2 .followup-stats > div,.design-v2 .followup-create,.design-v2 .followup-list,
+.design-v2 .duplicate-pair-list > article,.design-v2 .settings-card,.design-v2 .accounts-grid .settings-card,
+.design-v2 .canva-list,.design-v2 .canva-workspace,.design-v2 .osint-panel {
+  border-color:var(--border); border-radius:calc(var(--radius) + .35rem); background:var(--surface-raised); color:var(--foreground); box-shadow:0 10px 30px rgb(var(--shadow-color) / 5%);
+}
+.design-v2 .meeting-editor-heading h2,.design-v2 .meeting-list-section h2,.design-v2 .meeting-list-copy > strong,
+.design-v2 .followup-stats strong,.design-v2 .followup-create h2,.design-v2 .followup-section-head h2,
+.design-v2 .followup-card-head h3,.design-v2 .settings-card h2 { color:var(--foreground); }
+.design-v2 .meeting-editor-heading p,.design-v2 .meeting-list-section header p,.design-v2 .meeting-list-copy > span,.design-v2 .meeting-list-copy p,
+.design-v2 .followup-stats span,.design-v2 .followup-create p,.design-v2 .followup-section-head p,.design-v2 .followup-card-head p,
+.design-v2 .settings-card header p { color:var(--text-subtle); }
+.design-v2 .meeting-editor-icon,.design-v2 .settings-icon { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .meeting-recorder,.design-v2 .meeting-date-badge,.design-v2 .followup-card,.design-v2 .followup-empty,
+.design-v2 .settings-security-note,.design-v2 .canva-selected-contacts > div,.design-v2 .osint-selected { border-color:var(--border); background:var(--surface-subtle); color:var(--foreground); }
+.design-v2 .meeting-participant-options,.design-v2 .meeting-recordings-list textarea,.design-v2 .meeting-form select,
+.design-v2 .followup-matches,.design-v2 .osint-results-controls select { border-color:var(--border); background:var(--surface-raised); color:var(--foreground); }
+.design-v2 .meeting-list > article,.design-v2 .meeting-list-section > header,.design-v2 .settings-card > header,.design-v2 .settings-tabs { border-color:var(--border); }
+.design-v2 .meeting-date-badge strong,.design-v2 .meeting-count svg,.design-v2 .followup-kind { color:var(--brand-strong); }
+.design-v2 .followup-card { background:var(--card); }
+.design-v2 .followup-date { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .followup-date.overdue { background:var(--status-urgent-soft); color:var(--status-urgent); }
+.design-v2 .settings-tabs button { color:var(--text-subtle); }
+.design-v2 .settings-tabs button[aria-selected="true"] { border-color:var(--brand); color:var(--brand-strong); }
+
+.design-v2 .canva-list > button { color:var(--text-subtle); }
+.design-v2 .canva-list > button:hover,.design-v2 .canva-list > button.active { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .canva-toolbar { border-color:var(--border); }
+.design-v2 .canva-toolbar > input { background:transparent; color:var(--foreground); }
+.design-v2 .canva-stage-scroll { background:var(--surface-subtle); }
+.design-v2 .canva-stage { background-color:var(--surface-subtle); background-image:radial-gradient(color-mix(in srgb,var(--brand) 30%,var(--border)) 1px,transparent 1px); }
+.design-v2 .canva-node { border-color:var(--border); background:var(--card); box-shadow:0 10px 26px rgb(var(--shadow-color) / 9%); }
+.design-v2 .canva-node-handle { border-color:var(--border); background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .canva-node-main strong,.design-v2 .osint-section-toggle { color:var(--foreground); }
+.design-v2 .canva-node-main p,.design-v2 .canva-node-main span,.design-v2 .osint-hint { color:var(--text-subtle); }
+.design-v2 .osint-status { border-color:var(--border); background:var(--surface-raised); color:var(--text-subtle); }
+.design-v2 .osint-contact-results,.design-v2 .osint-source-picker label,.design-v2 .osint-items article,.design-v2 .osint-candidate { border-color:var(--border); }
+.design-v2 .osint-contact-results button:hover,.design-v2 .osint-source-picker label:has(input:checked),.design-v2 .osint-tabs button.active { background:var(--brand-soft); color:var(--brand-strong); }
+.design-v2 .osint-tabs { border-color:var(--border); }
+
+.design-v2 input:not([type="checkbox"]):not([type="radio"]),
+.design-v2 textarea,.design-v2 select { border-color:var(--input); background:var(--surface-raised); color:var(--foreground); }
+.design-v2 input::placeholder,.design-v2 textarea::placeholder { color:color-mix(in srgb,var(--text-subtle) 76%,transparent); }
+.design-v2 .bg-white { background-color:var(--surface-raised)!important; }
+.design-v2 .bg-slate-50 { background-color:var(--surface-subtle)!important; }
+.design-v2 .text-slate-500 { color:var(--text-subtle)!important; }
+.design-v2 .border,.design-v2 .border-b,.design-v2 .border-t { border-color:var(--border)!important; }
+
+html[data-theme="dark"] .design-v2 img,html[data-theme="cyberpunk"] .design-v2 img { filter:saturate(.9) brightness(.92); }
+html[data-theme="cyberpunk"] .design-v2 .contact-card:hover,
+html[data-theme="cyberpunk"] .design-v2 .meeting-editor,
+html[data-theme="cyberpunk"] .design-v2 .followup-list,
+html[data-theme="cyberpunk"] .design-v2 .graph-canvas { box-shadow:0 0 0 1px color-mix(in srgb,var(--brand) 24%,transparent),0 0 28px rgb(var(--shadow-color) / 10%); }
+html[data-theme="minimal"] .design-v2 .contact-card,
+html[data-theme="minimal"] .design-v2 .module-heading,
+html[data-theme="minimal"] .design-v2 .graph-toolbar,
+html[data-theme="minimal"] .design-v2 .calendar-module > div:first-child,
+html[data-theme="minimal"] .design-v2 .meeting-editor,
+html[data-theme="minimal"] .design-v2 .followup-list,
+html[data-theme="minimal"] .design-v2 .settings-card { box-shadow:none; }
+
+@media(min-width:1024px) {
+  .design-v2.admin-shell { grid-template-columns:16rem minmax(0,1fr); }
+  .design-v2 .contacts-module { grid-template-columns:16rem minmax(0,1fr); }
+  .design-v2 .contacts-content,.design-v2 .graph-module,.design-v2 .meetings-module,.design-v2 .followups-module,.design-v2 .duplicates-module,.design-v2 .canva-module,.design-v2 .osint-module,.design-v2 .settings-module { padding:2.2rem clamp(1.8rem,3vw,3.25rem) 4rem; }
+}
+@media(max-width:640px) {
+  .design-v2 .admin-header { min-height:4rem; }
+  .design-v2 .module-heading,.design-v2 .graph-toolbar,.design-v2 .calendar-module > div:first-child { border-radius:calc(var(--radius) + .25rem); padding:1rem; }
+  .design-v2 .contact-grid { gap:.75rem; }
+}

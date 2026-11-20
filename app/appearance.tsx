@@ -24,8 +24,8 @@ const themeColors: Record<Exclude<AppearanceTheme, "system"> | "light", string> 
 };
 
 type DesignPreviewContextValue = { enabled: boolean; setEnabled: (enabled: boolean) => void; mounted: boolean };
-const DesignPreviewContext = createContext<DesignPreviewContextValue>({ enabled: false, setEnabled: () => undefined, mounted: false });
-const previewStorageKey = "contactgraph.design.v2.enabled";
+const DesignPreviewContext = createContext<DesignPreviewContextValue>({ enabled: true, setEnabled: () => undefined, mounted: false });
+const legacyStorageKey = "contactgraph.design.legacy.enabled.v1";
 
 function ThemeChrome() {
   const { theme, resolvedTheme } = useTheme();
@@ -45,16 +45,16 @@ function ThemeChrome() {
 }
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const [previewEnabled, setPreviewEnabledState] = useState(false);
+  const [previewEnabled, setPreviewEnabledState] = useState(true);
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    try { setPreviewEnabledState(window.localStorage.getItem(previewStorageKey) === "true"); }
-    catch { setPreviewEnabledState(false); }
+    try { setPreviewEnabledState(window.localStorage.getItem(legacyStorageKey) !== "true"); }
+    catch { setPreviewEnabledState(true); }
     setMounted(true);
   }, []);
   const setEnabled = (enabled: boolean) => {
     setPreviewEnabledState(enabled);
-    try { window.localStorage.setItem(previewStorageKey, String(enabled)); } catch { /* Presentation preference remains in memory. */ }
+    try { window.localStorage.setItem(legacyStorageKey, String(!enabled)); } catch { /* Presentation preference remains in memory. */ }
   };
   const preview = useMemo(() => ({ enabled: previewEnabled, setEnabled, mounted }), [mounted, previewEnabled]);
   return <NextThemeProvider attribute="data-theme" defaultTheme="warm" enableSystem storageKey="contactgraph.appearance.theme.v1" themes={[...APPEARANCE_THEMES.filter(theme => theme !== "system")]}>
@@ -95,7 +95,7 @@ export function AppearanceSettings() {
     <div className="settings-card-body">
       <AppearancePicker />
       <p className="appearance-help">System uses Warm for a light operating-system preference and Dark for a dark preference. Cyberpunk changes color and typography only.</p>
-      <label className="appearance-preview-toggle"><span><strong>Preview the new design</strong><small>Use the redesigned navigation and relationship-first screens on this device.</small></span><input type="checkbox" checked={mounted && enabled} disabled={!mounted} onChange={(event) => setEnabled(event.target.checked)} /></label>
+      <label className="appearance-preview-toggle"><span><strong>Temporary legacy interface</strong><small>Return to the previous navigation on this device during the transition period.</small></span><input type="checkbox" checked={mounted && !enabled} disabled={!mounted} onChange={(event) => setEnabled(!event.target.checked)} /></label>
     </div>
   </section>;
 }
