@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const tracked = execFileSync("git", ["ls-files", "-z"]).toString("utf8").split("\0").filter(Boolean);
-const firebaseFiles = new Set(["README.md", "api.ts", "auth-context.tsx", "backup-firestore.mjs", "check-artifact.mjs", "check-permissions.mjs", "check-source.mjs", "export-duckdb.py", "firebase.json", "firebase.ts", "firestore.rules", "storage.rules", "firestore.rules.test.mjs", "hermes-api.ts", "import-firestore.mjs", "index.html", "main.tsx", "meeting-recorder.test.mjs", "migration.test.mjs", "offline-status.tsx", "offline.ts", "permission-catalog.json", "quota.mjs", "quota.test.mjs", "recording-store.ts", "canvas-kanban.test.mjs", "search.test.mjs", "calendar.test.mjs", "settings-module.tsx", "sync-collections.json", "vite-env.d.ts"]);
+const firebaseFiles = new Set(["README.md", "all-connections-graph.test.mjs", "api.ts", "auth-context.tsx", "backup-firestore.mjs", "check-artifact.mjs", "check-permissions.mjs", "check-source.mjs", "export-duckdb.py", "firebase.json", "firebase.ts", "firestore.rules", "storage.rules", "firestore.rules.test.mjs", "hermes-api.ts", "import-firestore.mjs", "index.html", "main.tsx", "meeting-recorder.test.mjs", "migration.test.mjs", "offline-status.tsx", "offline.ts", "permission-catalog.json", "quota.mjs", "quota.test.mjs", "recording-store.ts", "canvas-kanban.test.mjs", "search.test.mjs", "calendar.test.mjs", "settings-module.tsx", "sync-collections.json", "vite-env.d.ts"]);
 const allowed = (file) => file === ".gitignore"
   || file === "package.json" || file === "package-lock.json" || file === "postcss.config.mjs"
   || file === "tsconfig.json" || file === "vite.firebase.config.ts"

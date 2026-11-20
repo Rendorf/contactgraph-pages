@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useAuth } from "./auth-context";
 import { GraphZoomControls, useGraphZoom } from "./graph-zoom";
+import { AllConnectionsGraph } from "./all-connections-graph";
 import { PeopleGraph } from "./people-graph";
 
 type GraphContact = {
@@ -20,7 +21,7 @@ type GraphContact = {
 
 type Point = { x: number; y: number };
 type TagEdge = { source: string; target: string; shared: number };
-type GraphMode = "labels" | "organizations" | "people";
+type GraphMode = "labels" | "organizations" | "people" | "all";
 
 const WIDTH = 1100;
 const HEIGHT = 720;
@@ -176,12 +177,14 @@ export function ContactGraph({ contacts, onSelectContact }: {
   }, [contacts, focusTag, graphMode, selectedLabel, showUnassigned, tagQuery]);
 
   const hovered = graph.visibleContacts.find((contact) => contact.id === hoveredContact);
-  const modeSwitch = <div className={`graph-mode-switch ${canViewPeople ? "three" : ""}`} role="radiogroup" aria-label="Group graph nodes by">
+  const modeSwitch = <div className={`graph-mode-switch ${canViewPeople ? "four" : ""}`} role="radiogroup" aria-label="Choose graph view">
     <button role="radio" aria-checked={graphMode === "labels"} className={graphMode === "labels" ? "active" : ""} onClick={() => { setGraphMode("labels"); setFocusTag(selectedLabel); setTagQuery(""); }}><Tag />Tags</button>
     <button role="radio" aria-checked={graphMode === "organizations"} className={graphMode === "organizations" ? "active" : ""} onClick={() => { setSelectedLabel((current) => current ?? (graphMode === "labels" ? focusTag : null)); setGraphMode("organizations"); setFocusTag(null); setTagQuery(""); }}><Building2 />Organizations</button>
     {canViewPeople && <button role="radio" aria-checked={graphMode === "people"} className={graphMode === "people" ? "active" : ""} onClick={() => setGraphMode("people")}><Share2 />People</button>}
+    {canViewPeople && <button role="radio" aria-checked={graphMode === "all"} className={graphMode === "all" ? "active" : ""} onClick={() => setGraphMode("all")}><Network />All</button>}
   </div>;
   if (graphMode === "people" && canViewPeople) return <PeopleGraph contacts={contacts} onSelectContact={onSelectContact} modeSwitch={modeSwitch} />;
+  if (graphMode === "all" && canViewPeople) return <AllConnectionsGraph contacts={contacts} onSelectContact={onSelectContact} modeSwitch={modeSwitch} />;
 
   return <div className="graph-module">
     <div className="graph-toolbar">

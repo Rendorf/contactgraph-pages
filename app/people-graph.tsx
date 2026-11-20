@@ -6,93 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { fetchLinks, LINKS_EVENT, type ContactLink } from "./contact-connections";
+import { GRAPH_CENTER as CENTER, GRAPH_HEIGHT as HEIGHT, GRAPH_WIDTH as WIDTH, graphForceLayout as forceLayout } from "./graph-force-layout";
 import { GraphZoomControls, useGraphZoom } from "./graph-zoom";
 import { normalizeSearch, searchRank } from "./search";
 
 type PeopleContact = { id: string; name: string; organization?: string; role?: string; labels?: string[] };
-type Point = { x: number; y: number };
 
-const WIDTH = 1100;
-const HEIGHT = 720;
-const CENTER = { x: WIDTH / 2, y: HEIGHT / 2 };
 const NODE_LIMIT = 180;
 const NAME_LIMIT = 50;
-const MARGIN = 40;
-
-const hash = (value: string) => {
-  let result = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    result ^= value.charCodeAt(index);
-    result = Math.imul(result, 16777619);
-  }
-  return result >>> 0;
-};
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-
-/**
- * Deterministic force layout (Fruchterman–Reingold with gravity). Starting points come
- * from a hash of each contact ID, so the same data always draws the same picture.
- * At most NODE_LIMIT nodes, so the O(n²) repulsion stays fast enough for one render.
- */
-function forceLayout(nodes: string[], edges: Array<[string, string]>, focus: string | null, depth: Map<string, number>): Map<string, Point> {
-  const positions = new Map<string, Point>();
-  nodes.forEach((id, index) => {
-    const random = hash(id);
-    if (id === focus) { positions.set(id, { ...CENTER }); return; }
-    const ring = focus ? depth.get(id) ?? 2 : 0;
-    const angle = focus ? (index / Math.max(1, nodes.length)) * Math.PI * 2 + (random % 100) / 400 : ((random % 3600) / 3600) * Math.PI * 2;
-    const radius = focus ? 110 * ring + (random % 30) : 40 + ((random >>> 12) % 240);
-    positions.set(id, { x: CENTER.x + Math.cos(angle) * radius, y: CENTER.y + Math.sin(angle) * radius });
-  });
-  if (nodes.length < 2) return positions;
-  // Ideal edge length; capped so a small network stays compact in the middle.
-  const k = Math.min(110, Math.sqrt(((WIDTH - 2 * MARGIN) * (HEIGHT - 2 * MARGIN)) / nodes.length) * 0.75);
-  const steps = 220;
-  for (let step = 0; step < steps; step += 1) {
-    const temperature = 45 * (1 - step / steps) + 1;
-    const shift = new Map(nodes.map((id) => [id, { x: 0, y: 0 }]));
-    for (let left = 0; left < nodes.length; left += 1) {
-      const a = positions.get(nodes[left])!;
-      for (let right = left + 1; right < nodes.length; right += 1) {
-        const b = positions.get(nodes[right])!;
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
-        let distance = Math.hypot(dx, dy);
-        if (distance < 0.01) { dx = 0.01 * ((left % 3) - 1 || 1); dy = 0.01; distance = 0.015; }
-        const force = (k * k) / distance;
-        const fx = (dx / distance) * force;
-        const fy = (dy / distance) * force;
-        const sa = shift.get(nodes[left])!;
-        const sb = shift.get(nodes[right])!;
-        sa.x += fx; sa.y += fy; sb.x -= fx; sb.y -= fy;
-      }
-    }
-    for (const [source, target] of edges) {
-      const a = positions.get(source)!;
-      const b = positions.get(target)!;
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      const distance = Math.max(0.01, Math.hypot(dx, dy));
-      const force = (distance * distance) / k;
-      const sa = shift.get(source)!;
-      const sb = shift.get(target)!;
-      sa.x -= (dx / distance) * force; sa.y -= (dy / distance) * force;
-      sb.x += (dx / distance) * force; sb.y += (dy / distance) * force;
-    }
-    for (const id of nodes) {
-      if (id === focus) continue;
-      const point = positions.get(id)!;
-      const move = shift.get(id)!;
-      move.x += (CENTER.x - point.x) * 0.04 * k / 60;
-      move.y += (CENTER.y - point.y) * 0.04 * k / 60;
-      const length = Math.max(0.01, Math.hypot(move.x, move.y));
-      const limited = Math.min(length, temperature);
-      point.x = Math.min(WIDTH - MARGIN, Math.max(MARGIN, point.x + (move.x / length) * limited));
-      point.y = Math.min(HEIGHT - MARGIN, Math.max(MARGIN, point.y + (move.y / length) * limited));
-    }
-  }
-  return positions;
-}
 
 export function PeopleGraph({ contacts, onSelectContact, modeSwitch }: { contacts: PeopleContact[]; onSelectContact: (id: string) => void; modeSwitch: ReactNode }) {
   const [links, setLinks] = useState<ContactLink[]>([]);

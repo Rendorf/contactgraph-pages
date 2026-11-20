@@ -15,6 +15,7 @@
     "check:firebase-source": "node firebase-pages/check-source.mjs",
     "test:firebase-rules": "firebase emulators:exec --only firestore,storage --project demo-contactgraph --config firebase-pages/firebase.json \"node --test firebase-pages/firestore.rules.test.mjs firebase-pages/migration.test.mjs\" && rm -f firestore-debug.log storage-debug.log",
     "test:calendar": "node --test firebase-pages/calendar.test.mjs",
+    "test:all-connections-graph": "node --test firebase-pages/all-connections-graph.test.mjs",
     "test:meeting-recorder": "node --test firebase-pages/meeting-recorder.test.mjs",
     "test:search": "node --test firebase-pages/search.test.mjs",
     "test:canvas-kanban": "node --test firebase-pages/canvas-kanban.test.mjs",

@@ -37,3 +37,19 @@ Microphone audio can contain `pii-sensitive` personal conversations. Stopping a 
 | The flow is automated at high volume | Preview performs no server operation; the existing authenticated upload limits apply only when Save is pressed. |
 
 Preview and discard are not logged because that would add a private activity record without a security benefit. Existing server-side save and access events remain the auditable boundary. No new endpoint, parser, dependency, or integration is introduced.
+
+## Combined relationship graph (2026-11-20)
+
+The **All** graph combines existing `pii-sensitive` contact names, organisations, tags, and person-to-person links in one browser view. It reuses the protected contacts already loaded by the application and the existing authenticated `/api/contact-links` route; it introduces no new storage, endpoint, parser, or dependency.
+
+| Misuse | Required control |
+| --- | --- |
+| A role without connection access infers person-to-person relationships | Render the All tab only when both `connections.view` and `contacts.view` are granted; the existing route independently enforces the same permissions. |
+| A stale or malformed link reveals or crashes on a missing contact | Build edges only when both referenced contacts exist in the authorized contact set; ignore self-links and duplicate pairs. |
+| Contact, organisation, tag, or note text injects markup | Render all labels as React text nodes and SVG text/title properties; do not use HTML injection APIs. |
+| A very large contact set freezes a phone | Build the complete lightweight relationship index once, then cap the rendered focused/overview subgraph and use deterministic bounded layout work. |
+| Search exposes more data than the user may view | Search only the already-authorized in-memory nodes; do not add a server query or log search text. |
+| An automated tab repeatedly exhausts the connection endpoint | Fetch once on mount and only refresh on the existing local collection-change event; do not poll. |
+| A dependency failure discloses internals | Show the existing neutral connection-load error and render no relationship graph. |
+
+Acceptance criteria: the fourth graph tab displays person↔person, person↔organisation, and person↔tag edges with a visible legend; organisation and tag relationships are therefore traceable through their people. Search can focus any of the three node types, focused traversal is bounded, people open their contact record, missing/duplicate links are ignored, and unauthorized users never see or fetch the combined view.

@@ -87,7 +87,10 @@ next-env.d.ts
 !/app/meetings-module.tsx
 !/app/meeting-recorder.tsx
 !/app/contact-connections.tsx
+!/app/all-connections-graph.tsx
+!/app/all-connections-graph-data.ts
 !/app/people-graph.tsx
+!/app/graph-force-layout.ts
 !/app/graph-zoom.tsx
 !/app/followups-module.tsx
 !/app/contact-followup-reminders.tsx
