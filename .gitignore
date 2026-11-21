@@ -92,6 +92,7 @@ next-env.d.ts
 !/app/people-graph.tsx
 !/app/graph-force-layout.ts
 !/app/graph-zoom.tsx
+!/app/graph-pan.ts
 !/app/followups-module.tsx
 !/app/contact-followup-reminders.tsx
 !/app/osint-module.tsx

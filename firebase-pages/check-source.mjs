@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const tracked = execFileSync("git", ["ls-files", "-z"]).toString("utf8").split("\0").filter(Boolean);
-const firebaseFiles = new Set(["README.md", "all-connections-graph.test.mjs", "api.ts", "auth-context.tsx", "backup-firestore.mjs", "check-artifact.mjs", "check-permissions.mjs", "check-source.mjs", "export-duckdb.py", "firebase.json", "firebase.ts", "firestore.rules", "storage.rules", "firestore.rules.test.mjs", "hermes-api.ts", "import-firestore.mjs", "index.html", "main.tsx", "meeting-recorder.test.mjs", "migration.test.mjs", "offline-status.tsx", "offline.ts", "permission-catalog.json", "quota.mjs", "quota.test.mjs", "recording-store.ts", "canvas-kanban.test.mjs", "search.test.mjs", "calendar.test.mjs", "settings-module.tsx", "sync-collections.json", "vite-env.d.ts"]);
+const firebaseFiles = new Set(["README.md", "all-connections-graph.test.mjs", "api.ts", "auth-context.tsx", "backup-firestore.mjs", "check-artifact.mjs", "check-permissions.mjs", "check-source.mjs", "export-duckdb.py", "firebase.json", "firebase.ts", "firestore.rules", "storage.rules", "firestore.rules.test.mjs", "graph-pan.test.mjs", "hermes-api.ts", "import-firestore.mjs", "index.html", "main.tsx", "meeting-recorder.test.mjs", "migration.test.mjs", "offline-status.tsx", "offline.ts", "permission-catalog.json", "quota.mjs", "quota.test.mjs", "recording-store.ts", "canvas-kanban.test.mjs", "search.test.mjs", "calendar.test.mjs", "settings-module.tsx", "sync-collections.json", "vite-env.d.ts"]);
 const allowed = (file) => file === ".gitignore"
   || file === "package.json" || file === "package-lock.json" || file === "postcss.config.mjs"
   || file === "tsconfig.json" || file === "vite.firebase.config.ts"
@@ -10,7 +10,7 @@ const allowed = (file) => file === ".gitignore"
   || file.startsWith("components/ui/") || file === "hooks/use-mobile.ts" || file === "lib/utils.ts"
   || file.startsWith("app/") && (file.endsWith(".tsx") || file.endsWith(".ts") || file === "app/globals.css" || file === "app/themes.css")
   || file.startsWith("public/") && ["favicon.svg", "window.svg", "globe.svg", "file.svg", "manifest.webmanifest", "service-worker.js"].includes(file.slice(7))
-  || ["docs/firebase-pages-threat-model.md", "docs/appearance-redesign-review.md", "docs/appearance-redesign-backlog.md", "docs/threat-notes/appearance-and-timeline-redesign-2026-11-18.md"].includes(file)
+  || ["docs/firebase-pages-threat-model.md", "docs/appearance-redesign-review.md", "docs/appearance-redesign-backlog.md", "docs/threat-notes/appearance-and-timeline-redesign-2026-11-18.md", "docs/threat-notes/graph-pan-2026-11-21.md"].includes(file)
   || file === "vendor/shadcn-tailwind-4.13.0.css" || file === "vendor/shadcn-tailwind-4.13.0.LICENSE.md"
   || ["scripts/osint-search.mjs", "scripts/contact-timeline.mjs", "scripts/contact-timeline.test.mjs"].includes(file);
 for (const file of tracked) {

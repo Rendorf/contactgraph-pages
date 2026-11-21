@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:search
       - run: npm run test:calendar
       - run: npm run test:all-connections-graph
+      - run: npm run test:graph-pan
       - run: npm run test:meeting-recorder
       - uses: actions/setup-java@v4
         with:

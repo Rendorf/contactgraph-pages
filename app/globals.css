@@ -150,14 +150,18 @@ button.small-tag:hover { background:#dff0ef; color:#0b626d; }
 .graph-distribution-list strong { text-align:right; font-weight:750; }
 .graph-distribution-list small { color:#738b94; text-align:right; font-size:.63rem; }
 .zoom-controls { display:inline-flex; align-items:center; gap:.2rem; border:1px solid #d3e0e4; border-radius:.7rem; background:#fff; padding:.2rem; box-shadow:0 1px 4px rgb(24 57 72 / 5%); }
+.graph-pan-help { display:inline-flex; align-items:center; gap:.3rem; padding:0 .45rem; color:#607985; font-size:.62rem; font-weight:750; white-space:nowrap; }
+.graph-pan-help svg { width:.8rem; height:.8rem; }
 .zoom-controls > button { height:1.9rem; min-width:1.9rem; border:0; border-radius:.48rem; padding:0; box-shadow:none; }
 .zoom-controls > button svg { width:.8rem; }
 .zoom-controls .zoom-level { min-width:3.1rem; padding:0 .35rem; color:#42616d; font-size:.62rem; font-weight:800; }
 .zoom-controls > button:hover:not(:disabled) { background:#e7f3f2; color:#0e6d75; }
 .graph-focus-layout { min-width:0; }
 .graph-visual { min-width:0; }
-.graph-canvas { position:relative; min-height:34rem; overflow:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; border:1px solid #d8e3e7; border-radius:1rem; background:radial-gradient(circle at 50% 48%,#fff 0,#f8fbfb 45%,#eef4f5 100%); box-shadow:0 2px 16px rgb(24 57 72 / 5%); }
-.graph-canvas > svg { display:block; width:100%; min-width:760px; height:auto; margin-inline:auto; }
+.graph-canvas { position:relative; height:clamp(30rem,68vh,44rem); min-height:30rem; overflow:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; border:1px solid #d8e3e7; border-radius:1rem; background:radial-gradient(circle at 50% 48%,#fff 0,#f8fbfb 45%,#eef4f5 100%); box-shadow:0 2px 16px rgb(24 57 72 / 5%); cursor:grab; }
+.graph-canvas[data-panning="true"] { cursor:grabbing; user-select:none; }
+.graph-canvas button,.graph-canvas [role="button"] { cursor:pointer; }
+.graph-canvas > svg { display:block; width:100%; min-width:760px; height:auto; margin:6rem; }
 .graph-node-hit { pointer-events:all; }
 .tag-edges line { stroke:#5d8c99; stroke-opacity:.18; }
 .contact-edges line { stroke:#73939d; stroke-width:.7; stroke-opacity:.11; }
