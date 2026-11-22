@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -89,7 +90,8 @@ test("OSINT manual search, feed collection, review and local schedule", async ()
   try {
     process.env.CONTACTGRAPH_OSINT_ENABLED = "1";
     process.env.CONTACTGRAPH_OSINT_DB = join(directory, "osint.duckdb");
-    process.env.CONTACTGRAPH_PYTHON ||= resolve("../.contactgraph-venv/bin/python");
+    const localPython = resolve("../.contactgraph-venv/bin/python");
+    process.env.CONTACTGRAPH_PYTHON ||= existsSync(localPython) ? localPython : "python3";
     process.env.CONTACTGRAPH_SEARXNG_URL = `http://127.0.0.1:${searchServer.address().port}`;
     process.env.CONTACTGRAPH_RSSHUB_URL = `http://127.0.0.1:${feedServer.address().port}`;
     process.env.CONTACTGRAPH_GDELT_URL = `http://127.0.0.1:${searchServer.address().port}/gdelt`;
