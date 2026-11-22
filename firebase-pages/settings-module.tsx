@@ -117,13 +117,14 @@ function OpenAiCard() {
     try {
       const response = await fetch("/api/settings", { cache: "no-store" });
       const body = await response.json().catch(() => ({})) as OpenAiStatus & { error?: string };
-      if (!response.ok) throw new Error(body.error || "Hermes is unavailable.");
+      if (!response.ok) throw new Error(body.error || "The cloud service is unavailable.");
       setStatus(body); setModel(body.model); setAvailable(true);
     } catch { setStatus(null); setAvailable(false); }
     finally { setChecking(false); }
   };
   useEffect(() => { if (!can("settings.manage")) return; const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [can]);
   if (!can("settings.manage")) return null;
+  const managed = status?.source === "environment";
   const change = async (method: "PUT" | "DELETE", path: string, payload?: object) => {
     setBusy(true);
     try {
@@ -137,13 +138,14 @@ function OpenAiCard() {
   };
   return <section className="settings-card settings-primary-card" aria-live="polite"><div className="settings-card-body">
     <h2>OpenAI message generation</h2>
-    <p>The key is stored on Hermes. Generation is available only while Hermes is online.</p>
-    <div className="settings-current"><div><span>Hermes service</span><strong>{checking ? "Checking…" : available ? "Online" : "Unavailable"}</strong></div><div><span>API key</span><strong>{status?.configured ? status.key_hint : "Not configured"}</strong></div><div><span>Model</span><strong>{status?.model || "—"}</strong></div></div>
-    {!available && <p role="status">Hermes is unavailable. Other ContactGraph features continue to work; your key cannot be saved until the service returns.</p>}
-    <Button variant="outline" onClick={() => void load()} disabled={busy || checking}>{checking ? "Checking…" : "Check Hermes again"}</Button>
-    <label className="settings-key-field"><span>{status?.configured ? "Replace OpenAI API key" : "OpenAI API key"}</span><div><Input type="password" autoComplete="off" spellCheck={false} value={key} onChange={(event) => setKey(event.target.value)} placeholder="sk-…" aria-label="OpenAI API key" disabled={!available || busy} /><Button disabled={!available || busy || !key.trim()} onClick={() => void change("PUT", "/api/settings/openai", { api_key: key.trim() })}>{busy ? "Saving…" : "Verify and save"}</Button></div></label>
-    <label className="settings-model-field"><span>Generation model</span><div><NativeSelect value={model} onChange={(event) => setModel(event.target.value)} aria-label="OpenAI generation model" disabled={!available || busy}>{!["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"].includes(model) && <NativeSelectOption value={model}>{model}</NativeSelectOption>}<NativeSelectOption value="gpt-6-astra">GPT-6 Astra</NativeSelectOption><NativeSelectOption value="gpt-6.1-sol">GPT-6.1 Sol</NativeSelectOption><NativeSelectOption value="gpt-6-luna">GPT-6 Luna</NativeSelectOption></NativeSelect><Button variant="outline" disabled={!available || busy || !status?.configured || !model || model === status.model} onClick={() => void change("PUT", "/api/settings/openai-model", { model })}>Save model</Button></div></label>
-    {status?.source === "settings" && <Button variant="outline" disabled={!available || busy} onClick={() => { if (window.confirm("Remove the OpenAI API key saved on Hermes?")) void change("DELETE", "/api/settings/openai"); }}>Remove saved key</Button>}
+    <p>The production key is stored in Google Secret Manager and is never sent to the browser.</p>
+    <div className="settings-current"><div><span>Cloud service</span><strong>{checking ? "Checking…" : available ? "Online" : "Unavailable"}</strong></div><div><span>API key</span><strong>{status?.configured ? `${status.key_hint}${managed ? " · managed" : ""}` : "Not configured"}</strong></div><div><span>Model</span><strong>{status?.model || "—"}</strong></div></div>
+    {!available && <p role="status">The cloud service is unavailable. Other ContactGraph features continue to work.</p>}
+    {managed && <p role="status">The API key and model are deployment settings. Rotate them in Google Secret Manager and Cloud Run.</p>}
+    <Button variant="outline" onClick={() => void load()} disabled={busy || checking}>{checking ? "Checking…" : "Check service again"}</Button>
+    {!managed && <label className="settings-key-field"><span>{status?.configured ? "Replace OpenAI API key" : "OpenAI API key"}</span><div><Input type="password" autoComplete="off" spellCheck={false} value={key} onChange={(event) => setKey(event.target.value)} placeholder="sk-…" aria-label="OpenAI API key" disabled={!available || busy} /><Button disabled={!available || busy || !key.trim()} onClick={() => void change("PUT", "/api/settings/openai", { api_key: key.trim() })}>{busy ? "Saving…" : "Verify and save"}</Button></div></label>}
+    {!managed && <label className="settings-model-field"><span>Generation model</span><div><NativeSelect value={model} onChange={(event) => setModel(event.target.value)} aria-label="OpenAI generation model" disabled={!available || busy}>{!["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"].includes(model) && <NativeSelectOption value={model}>{model}</NativeSelectOption>}<NativeSelectOption value="gpt-6-astra">GPT-6 Astra</NativeSelectOption><NativeSelectOption value="gpt-6.1-sol">GPT-6.1 Sol</NativeSelectOption><NativeSelectOption value="gpt-6-luna">GPT-6 Luna</NativeSelectOption></NativeSelect><Button variant="outline" disabled={!available || busy || !status?.configured || !model || model === status.model} onClick={() => void change("PUT", "/api/settings/openai-model", { model })}>Save model</Button></div></label>}
+    {status?.source === "settings" && <Button variant="outline" disabled={!available || busy} onClick={() => { if (window.confirm("Remove the OpenAI API key saved for this service?")) void change("DELETE", "/api/settings/openai"); }}>Remove saved key</Button>}
   </div></section>;
 }
 
@@ -151,7 +153,7 @@ export function SettingsModule({ embedded = false }: { embedded?: boolean }) {
   return <div className={embedded ? "settings-content" : "settings-module"}>
     {!embedded && <div className="module-heading"><div><p className="eyebrow">Administration</p><h1 className="module-title">Settings</h1></div></div>}
     <ExternalDataNotice />
-    <div className="settings-grid"><ThreeWaySyncCard /><OpenAiCard /><KeepSignedInCard /><TrustedDeviceCard /><section className="settings-card"><div className="settings-card-body"><h2>Live OSINT</h2><p>Live OSINT collection still requires a private server. Saved history remains private.</p></div></section></div>
+    <div className="settings-grid"><ThreeWaySyncCard /><OpenAiCard /><KeepSignedInCard /><TrustedDeviceCard /><section className="settings-card"><div className="settings-card-body"><h2>Live OSINT</h2><p>Managed collection runs in Google Cloud. Saved history remains private in Firestore and access-controlled by your ContactGraph role.</p></div></section></div>
   </div>;
 }
 

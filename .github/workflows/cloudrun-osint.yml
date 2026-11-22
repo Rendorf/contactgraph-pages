@@ -1,0 +1,95 @@
+name: Deploy ContactGraph OSINT API
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.cloudrun
+      - package.json
+      - package-lock.json
+      - cloudrun/requirements.txt
+      - scripts/cloudrun-server.mjs
+      - scripts/firebase-bridge.mjs
+      - scripts/firebase-osint-confirm.mjs
+      - scripts/firestore-osint-store.mjs
+      - scripts/osint-**
+      - cloudrun/**
+      - .github/workflows/cloudrun-osint.yml
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: contactgraph-osint-production
+  cancel-in-progress: false
+env:
+  PROJECT_ID: contactgraph-vusal-2026
+  REGION: europe-west1
+  SERVICE: contactgraph-osint-api
+  IMAGE: europe-west1-docker.pkg.dev/contactgraph-vusal-2026/contactgraph/contactgraph-osint-api
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.12.0'
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/osint-service.test.mjs scripts/osint-cloud.test.mjs scripts/firebase-bridge.test.mjs
+      - run: npx eslint scripts/cloudrun-server.mjs scripts/firebase-bridge.mjs scripts/firestore-osint-store.mjs scripts/osint-feed.mjs scripts/osint-web.mjs scripts/osint-service.mjs scripts/osint-providers.mjs scripts/osint-candidates.mjs
+      - run: npx tsc --noEmit --pretty false
+      - run: npm audit --prefix cloudrun --omit=dev --audit-level=high
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_DEPLOY_SERVICE_ACCOUNT != '' && vars.GCP_RUNTIME_SERVICE_ACCOUNT != '' && vars.GCP_SCHEDULER_SERVICE_ACCOUNT != ''
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production-osint
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+      - name: Build immutable container
+        run: gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --config cloudrun/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE:$GITHUB_SHA" .
+      - name: Deploy Cloud Run revision
+        env:
+          SCHEDULER_SERVICE_ACCOUNT: ${{ vars.GCP_SCHEDULER_SERVICE_ACCOUNT }}
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE:$GITHUB_SHA" \
+            --service-account "${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            --allow-unauthenticated \
+            --execution-environment gen2 \
+            --cpu 1 \
+            --memory 1Gi \
+            --concurrency 10 \
+            --min 0 \
+            --max 1 \
+            --timeout 300 \
+            --set-env-vars "CONTACTGRAPH_FIREBASE_PROJECT_ID=$PROJECT_ID,CONTACTGRAPH_FIREBASE_ALLOWED_ORIGINS=https://contacts.vusalkhalilov.com\,https://contactgraph-vusal-2026.web.app,CONTACTGRAPH_SCHEDULER_SERVICE_ACCOUNT=$SCHEDULER_SERVICE_ACCOUNT,CONTACTGRAPH_BRAVE_MONTHLY_LIMIT=2500" \
+            --set-secrets "BRAVE_SEARCH_API_KEY=brave-search-api-key:latest,OPENAI_API_KEY=openai-api-key:latest"
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          gcloud run services update "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --update-env-vars "CONTACTGRAPH_INTERNAL_AUDIENCE=$SERVICE_URL"
+          echo "SERVICE_URL=$SERVICE_URL" >> "$GITHUB_ENV"
+      - name: Configure authenticated collector schedule
+        env:
+          SCHEDULER_SERVICE_ACCOUNT: ${{ vars.GCP_SCHEDULER_SERVICE_ACCOUNT }}
+        run: |
+          if gcloud tasks queues describe osint-monitor --project "$PROJECT_ID" --location "$REGION" >/dev/null 2>&1; then
+            gcloud tasks queues update osint-monitor --project "$PROJECT_ID" --location "$REGION" --max-concurrent-dispatches 1 --max-dispatches-per-second 1
+          else
+            gcloud tasks queues create osint-monitor --project "$PROJECT_ID" --location "$REGION" --max-concurrent-dispatches 1 --max-dispatches-per-second 1
+          fi
+          if gcloud scheduler jobs describe contactgraph-osint-tick --project "$PROJECT_ID" --location "$REGION" >/dev/null 2>&1; then
+            gcloud scheduler jobs update http contactgraph-osint-tick --project "$PROJECT_ID" --location "$REGION" --schedule '*/5 * * * *' --time-zone 'Asia/Baku' --uri "$SERVICE_URL/internal/osint/tick" --http-method POST --oidc-service-account-email "$SCHEDULER_SERVICE_ACCOUNT" --oidc-token-audience "$SERVICE_URL" --attempt-deadline 30m
+          else
+            gcloud scheduler jobs create http contactgraph-osint-tick --project "$PROJECT_ID" --location "$REGION" --schedule '*/5 * * * *' --time-zone 'Asia/Baku' --uri "$SERVICE_URL/internal/osint/tick" --http-method POST --oidc-service-account-email "$SCHEDULER_SERVICE_ACCOUNT" --oidc-token-audience "$SERVICE_URL" --attempt-deadline 30m
+          fi
+      - name: Verify health
+        run: curl --fail --silent --show-error "$SERVICE_URL/healthz"

@@ -12,8 +12,8 @@ const paths = {
 
 async function authorizedFetch(path: string, options: RequestInit, timeout: number) {
   const user = auth?.currentUser;
-  if (!user) throw new Error("Sign in before using Hermes features.");
-  if (!navigator.onLine) throw new Error("Connect to the internet before using Hermes features.");
+  if (!user) throw new Error("Sign in before using cloud features.");
+  if (!navigator.onLine) throw new Error("Connect to the internet before using cloud features.");
   try {
     const headers = new Headers(options.headers);
     headers.set("authorization", `Bearer ${await user.getIdToken()}`);
@@ -24,17 +24,17 @@ async function authorizedFetch(path: string, options: RequestInit, timeout: numb
       cache: "no-store",
       signal: options.signal ?? AbortSignal.timeout(timeout),
     });
-  } catch { throw new Error("Hermes is unavailable. This feature will work when its service returns."); }
+  } catch { throw new Error("The ContactGraph cloud service is unavailable. Try again shortly."); }
 }
 
 export async function hermesRequest(name: keyof typeof paths, options: RequestInit = {}) {
   const response = await authorizedFetch(paths[name], options, name === "holiday" || name === "birthday" ? 75_000 : 12_000);
   const body = await response.json().catch(() => ({})) as { error?: unknown };
-  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "Hermes could not complete the request.");
+  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "The cloud service could not complete the request.");
   return body;
 }
 
 export function hermesOsintFetch(path: string, options: RequestInit = {}) {
   if (!/^\/api\/osint(?:\/|$)/.test(path) || path.includes("?") || path.includes("#")) throw new Error("Invalid OSINT path.");
-  return authorizedFetch(path.replace(/^\/api\/osint/, "/v1/firebase/osint"), options, /\/(?:search|run)$/.test(path) ? 90_000 : 30_000);
+  return authorizedFetch(path.replace(/^\/api\/osint/, "/v1/firebase/osint"), options, /\/(?:search|run)$/.test(path) ? 300_000 : 30_000);
 }

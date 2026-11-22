@@ -126,10 +126,14 @@ next-env.d.ts
 !/docs/firebase-pages-threat-model.md
 !/docs/appearance-redesign-review.md
 !/docs/appearance-redesign-backlog.md
+!/docs/osint-cloud-backend.md
 !/docs/threat-notes/
 !/docs/threat-notes/appearance-and-timeline-redesign-2026-11-18.md
 !/package.json
 !/package-lock.json
+!/Dockerfile.cloudrun
+!/cloudrun/
+!/cloudrun/**
 !/postcss.config.mjs
 !/tsconfig.json
 !/vite.firebase.config.ts
@@ -142,6 +146,20 @@ next-env.d.ts
 !/scripts/osint-search.mjs
 !/scripts/contact-timeline.mjs
 !/scripts/contact-timeline.test.mjs
+!/scripts/cloudrun-server.mjs
+!/scripts/celebration-address.mjs
+!/scripts/firebase-bridge.mjs
+!/scripts/firebase-bridge.test.mjs
+!/scripts/firebase-osint-confirm.mjs
+!/scripts/firestore-osint-store.mjs
+!/scripts/osint-candidates.mjs
+!/scripts/osint-cloud.test.mjs
+!/scripts/osint-feed.mjs
+!/scripts/osint-providers.mjs
+!/scripts/osint-service.mjs
+!/scripts/osint-service.test.mjs
+!/scripts/osint-web.mjs
+!/scripts/osintdb.py
 
 # Added 2026-11-08: never publish file-sync conflict copies or macOS metadata.
 *.sync-conflict-*

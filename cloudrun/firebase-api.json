@@ -1,0 +1,16 @@
+{
+  "hosting": {
+    "site": "contactgraph-osint-api",
+    "public": "cloudrun/static",
+    "ignore": ["firebase-api.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "contactgraph-osint-api",
+          "region": "europe-west1"
+        }
+      }
+    ]
+  }
+}
