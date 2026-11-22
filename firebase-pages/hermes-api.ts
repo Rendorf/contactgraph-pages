@@ -1,6 +1,9 @@
 import { auth } from "./firebase";
 
-const origin = "https://api.contacts.vusalkhalilov.com";
+// This is the stable service URL, not a revision URL. Keep the destination
+// compile-time fixed because Firebase ID tokens must never follow user input or
+// a loosely controlled runtime setting to another origin.
+const origin = "https://contactgraph-osint-api-el2lney4da-ew.a.run.app";
 const paths = {
   availability: "/v1/firebase/availability",
   settings: "/v1/firebase/settings",

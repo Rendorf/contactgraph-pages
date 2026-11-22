@@ -10,8 +10,9 @@ type AuthState = { user: User | null; offline: boolean; can: (permission: string
 const AuthContext = createContext<AuthState>({ user: null, offline: false, can: () => false, refresh: async () => {} });
 export const useAuth = () => useContext(AuthContext);
 
-// These capabilities require a private server and are deliberately unavailable on Spark.
-const unavailable = new Set(["osint.view", "osint.manage", "sync.read", "sync.write"]);
+// Three-way sync still requires the private maintenance runtime. OSINT is served
+// by the managed Cloud Run bridge and remains permission-checked on that server.
+const unavailable = new Set(["sync.read", "sync.write"]);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
