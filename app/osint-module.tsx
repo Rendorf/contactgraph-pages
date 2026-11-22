@@ -158,6 +158,7 @@ export function OsintModule({ contacts, onContactUpdated }: { contacts: Contact[
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
   const saveInFlight = useRef(false);
   const [tab, setTab] = useState<"search" | "review" | "saved">("search");
@@ -175,10 +176,16 @@ export function OsintModule({ contacts, onContactUpdated }: { contacts: Contact[
   const suggestedHandles = useMemo(() => suggestMaigretHandles(selected || { name: query }), [selected, query]);
 
   const reload = useCallback(async () => {
-    const next = await api<Snapshot>("/api/osint");
-    setSnapshot(next);
-    setScheduleTime(next.settings.daily_time);
-    setScheduleEnabled(next.settings.enabled);
+    try {
+      const next = await api<Snapshot>("/api/osint");
+      setSnapshot(next);
+      setScheduleTime(next.settings.daily_time);
+      setScheduleEnabled(next.settings.enabled);
+      setLoadError("");
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "The managed OSINT service is unavailable.");
+      throw error;
+    }
   }, []);
   const refreshAfterSave = async () => {
     try { await reload(); }
@@ -313,7 +320,8 @@ export function OsintModule({ contacts, onContactUpdated }: { contacts: Contact[
 
   if (!can("osint.manage")) return <main className="osint-module"><div className="module-heading"><div><p className="eyebrow">Public information</p><h1 className="module-title">OSINT updates</h1><p className="module-subtitle">Saved and pending updates for contacts.</p></div></div><div className="osint-items">{snapshot?.items.length ? snapshot.items.map(item => <article key={item.id}><div className="osint-item-meta"><span>{nameById.get(item.contact_id) || "Contact unavailable"}</span><span>{item.status}</span></div><a href={safeSourceUrl(item.url)} target="_blank" rel="noopener noreferrer">{item.title}</a><p>{item.summary}</p></article>) : <p className="osint-empty">No updates recorded.</p>}</div></main>;
   return <main className="osint-module">
-    <div className="module-heading"><div><p className="eyebrow">Local intelligence</p><h1 className="module-title">OSINT updates</h1><p className="module-subtitle">Search public sources for a contact or any name or topic.</p></div><div className="osint-status"><span className={snapshot?.active ? "busy" : ""} />{snapshot?.active ? "Collector running" : "Collector idle"}</div></div>
+    <div className="module-heading"><div><p className="eyebrow">Local intelligence</p><h1 className="module-title">OSINT updates</h1><p className="module-subtitle">Search public sources for a contact or any name or topic.</p></div><div className="osint-status"><span className={snapshot?.active ? "busy" : ""} />{loadError ? "Service unavailable" : snapshot?.active ? "Collector running" : "Collector idle"}</div></div>
+    {loadError && <div className="osint-errors" role="alert"><span>OSINT is visible, but the managed service could not load: {loadError}</span><Button size="sm" variant="outline" onClick={() => void reload().catch(() => undefined)}>Retry</Button></div>}
     {saveNotice && <div className={`osint-save-notice ${saveNotice.state}`} role={saveNotice.state === "error" ? "alert" : "status"} aria-live={saveNotice.state === "error" ? "assertive" : "polite"} aria-atomic="true">
       {saveNotice.state === "saving" ? <RefreshCw className="animate-spin" aria-hidden="true" /> : saveNotice.state === "saved" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
       <div><strong>{saveNotice.state === "saving" ? "Saving" : saveNotice.state === "saved" ? "Saved" : "Save failed"}</strong><span>{saveNotice.message}</span></div>

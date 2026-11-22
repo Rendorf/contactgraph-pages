@@ -510,13 +510,12 @@ function ContactAttributeFilters({ positions, organizations, selectedPositions, 
   </div>;
 }
 
-function Navigation({ activeModule, contactCount, calendarCount, calendarError, followupCount, osintAvailable, mobile = false, onSelect }: {
+function Navigation({ activeModule, contactCount, calendarCount, calendarError, followupCount, mobile = false, onSelect }: {
   activeModule: Module;
   contactCount: number;
   calendarCount: number;
   calendarError: boolean;
   followupCount: number;
-  osintAvailable: boolean;
   mobile?: boolean;
   onSelect: (module: Module) => void;
 }) {
@@ -529,7 +528,7 @@ function Navigation({ activeModule, contactCount, calendarCount, calendarError, 
     {can("meetings.view") && <button className={activeModule === "meetings" ? "active" : ""} onClick={() => onSelect("meetings")}><CalendarDays /><span>Meetings</span></button>}
     {can("followups.view") && <button className={activeModule === "followups" ? "active" : ""} onClick={() => onSelect("followups")}><LayoutDashboard /><span>Follow-ups</span>{followupCount > 0 && <small aria-label={`${followupCount} follow-ups due or overdue`}>{followupCount}</small>}</button>}
     {!offline && can("canvases.view") && <button className={activeModule === "canva" ? "active" : ""} onClick={() => onSelect("canva")}><LayoutDashboard /><span>Canva</span></button>}
-    {!offline && osintAvailable && can("osint.view") && <button className={activeModule === "osint" ? "active" : ""} onClick={() => onSelect("osint")}><Radar /><span>OSINT updates</span></button>}
+    {!offline && can("osint.view") && <button className={activeModule === "osint" ? "active" : ""} onClick={() => onSelect("osint")}><Radar /><span>OSINT updates</span></button>}
     <button className={["settings", "accounts", "account"].includes(activeModule) ? "active" : ""} onClick={() => onSelect(can("settings.manage") ? "settings" : can("users.manage") ? "accounts" : "account")}><Settings2 /><span>Settings</span></button>
   </nav>;
 }
@@ -565,7 +564,6 @@ export default function Home() {
       : ["today", "more"].includes(current) ? "contacts" : current), 0);
     return () => window.clearTimeout(timer);
   }, [designPreview.enabled, designPreview.mounted]);
-  const [osintAvailable, setOsintAvailable] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -587,15 +585,6 @@ export default function Home() {
   const [bulkTag, setBulkTag] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [contactMergeOpen, setContactMergeOpen] = useState(false);
-  useEffect(() => {
-    let active = true;
-    const check = () => { void fetch("/api/osint/availability", { cache: "no-store" }).then(response => { if (active) setOsintAvailable(response.ok); }).catch(() => { if (active) setOsintAvailable(false); }); };
-    check();
-    const timer = window.setInterval(check, 60_000);
-    window.addEventListener("online", check);
-    window.addEventListener("focus", check);
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener("online", check); window.removeEventListener("focus", check); };
-  }, []);
   useEffect(() => {
     const refreshAfterSync = () => {
       void fetch("/api/contacts/overrides", { cache: "no-store" })
@@ -904,7 +893,7 @@ export default function Home() {
     <aside className="admin-sidebar">
       <div className="admin-brand"><div className="brand-mark"><UserRound /></div><div><strong>ContactGraph</strong><span>{designPreview.enabled ? "Relationships, remembered" : "Network admin"}</span></div></div>
       <p className="navigation-label">Workspace</p>
-      {designPreview.enabled ? <RedesignedNavigation active={visibleModule} attention={calendarCount} onSelect={selectModule} /> : <Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} onSelect={selectModule} />}
+      {designPreview.enabled ? <RedesignedNavigation active={visibleModule} attention={calendarCount} onSelect={selectModule} /> : <Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} onSelect={selectModule} />}
       <div className="sidebar-status"><span className="status-dot" /><div><strong>{import.meta.env.MODE === "firebase-pages" ? "Shared database" : "Local database"}</strong><span>{contacts.length.toLocaleString()} records · {import.meta.env.MODE === "firebase-pages" ? "Firestore" : "DuckDB"}</span></div></div>
     </aside>
 
@@ -916,7 +905,7 @@ export default function Home() {
         <OfflineStatus /><Button className="header-signout" size="sm" variant="outline" onClick={() => void signOut()}>Sign out</Button><div className="header-avatar">{user?.display_name?.slice(0, 2).toUpperCase() || "VK"}</div>
       </header>
 
-      {visibleModule === "today" ? <TodayModule contacts={contacts} data={calendarData} onOpenContact={openContactById} onSelect={selectModule} onAddMeetingNotes={openMeetingNotes} /> : visibleModule === "more" ? <MoreModule osintAvailable={osintAvailable} onSelect={selectModule} /> : visibleModule === "contacts" ? <div className="contacts-module">
+      {visibleModule === "today" ? <TodayModule contacts={contacts} data={calendarData} onOpenContact={openContactById} onSelect={selectModule} onAddMeetingNotes={openMeetingNotes} /> : visibleModule === "more" ? <MoreModule onSelect={selectModule} /> : visibleModule === "contacts" ? <div className="contacts-module">
         <aside className="tag-sidebar overflow-y-auto"><div className="flex min-h-0 flex-1 flex-col"><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></div></aside>
         <section className="contacts-content">
           <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{selectedPositions.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updatePositions([])}><span className="truncate">Position: {selectedPositions.length === 1 ? selectedPositions[0] : `${selectedPositions.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedOrganizations.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updateOrganizations([])}><span className="truncate">Organization: {selectedOrganizations.length === 1 ? selectedOrganizations[0] : `${selectedOrganizations.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || (can("contacts.merge") && can("followups.view") && can("followups.manage"))) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
@@ -951,7 +940,7 @@ export default function Home() {
       </div> : visibleModule === "graph" ? <ContactGraph contacts={contacts} onSelectContact={openContactById} /> : visibleModule === "calendar" ? <CalendarModule contacts={contacts} data={calendarData} month={calendarMonth} onMonthChange={setCalendarMonth} onOpenContact={openContactById} onOpenSettings={() => setActiveModule(can("settings.manage") ? "settings" : "account")} /> : visibleModule === "duplicates" ? <DuplicatesModule contacts={contacts} onOpenContact={openContactById} onMerge={mergeDuplicatePair} onDelete={deleteDuplicateContacts} /> : visibleModule === "meetings" ? <MeetingsModule contacts={contacts} prefillContactId={meetingPrefill} onPrefillConsumed={() => setMeetingPrefill("")} /> : visibleModule === "followups" ? <FollowupsModule contacts={contacts} onOpenContact={openContactById} onAddMeetingNotes={openMeetingNotes} /> : visibleModule === "canva" ? <CanvaModule contacts={contacts} /> : visibleModule === "osint" ? <OsintModule contacts={contacts} onContactUpdated={(contact) => setContacts(current => current.map(item => item.id === contact.id ? contact as Contact : item))} /> : <SettingsArea section={visibleModule as SettingsSection} onSelect={setActiveModule} />}
     </div>
 
-    {!designPreview.enabled && <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>}
+    {!designPreview.enabled && <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>}
     {designPreview.enabled && <RedesignedNavigation mobile active={visibleModule} attention={calendarCount} onSelect={selectModule} />}
     <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}><SheetContent side="left" className="w-[88vw] overflow-y-auto border-r-[#d5e1e6] bg-[#f8fbfc] p-5 sm:max-w-sm"><SheetHeader className="mb-4 px-0 pt-2"><SheetTitle>Filter contacts</SheetTitle><SheetDescription>Select one or more positions, organizations and tags.</SheetDescription></SheetHeader><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></SheetContent></Sheet>
     {visibleModule === "contacts" && <Button className="mobile-filter-button" onClick={() => setFiltersOpen(true)}><Tag />Filters{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Button>}
