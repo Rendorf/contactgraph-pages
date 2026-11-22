@@ -18,6 +18,7 @@
     "test:all-connections-graph": "node --test firebase-pages/all-connections-graph.test.mjs",
     "test:graph-pan": "node --test firebase-pages/graph-pan.test.mjs",
     "test:meeting-recorder": "node --test firebase-pages/meeting-recorder.test.mjs",
+    "test:meeting-lists": "node --test firebase-pages/meeting-lists.test.mjs",
     "test:search": "node --test firebase-pages/search.test.mjs",
     "test:canvas-kanban": "node --test firebase-pages/canvas-kanban.test.mjs",
     "test:firebase-quota": "node --test firebase-pages/quota.test.mjs",

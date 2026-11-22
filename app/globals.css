@@ -1414,3 +1414,19 @@ html[data-theme="minimal"] .design-v2 .settings-card { box-shadow:none; }
   .design-v2 .module-heading,.design-v2 .graph-toolbar,.design-v2 .calendar-module > div:first-child { border-radius:calc(var(--radius) + .25rem); padding:1rem; }
   .design-v2 .contact-grid { gap:.75rem; }
 }
+/* Shared meeting queues */
+.meeting-lists-workspace,.today-meeting-lists{margin-top:1.25rem;padding:1rem;border:1px solid var(--border);border-radius:1rem;background:var(--card)}
+.meeting-list-filters,.meeting-list-manager-tabs,.meeting-list-actions,.meeting-list-inline,.meeting-list-create{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.meeting-list-filters{margin:.85rem 0}.meeting-list-filters button span{margin-left:.4rem;opacity:.65}
+.meeting-list-manager{padding:1rem;margin-bottom:1rem;border-radius:.8rem;background:var(--muted)}
+.meeting-list-create input:first-child{min-width:14rem;flex:1}.meeting-list-create input[type=number]{width:7rem}
+.meeting-list-manager-tabs{margin:.75rem 0}.meeting-list-manager-tabs button{padding:.4rem .7rem;border-radius:999px}.meeting-list-manager-tabs button.selected{background:var(--primary);color:var(--primary-foreground)}
+.meeting-list-add{display:grid;gap:.35rem}.meeting-list-add button{display:flex;align-items:center;gap:.4rem;padding:.55rem;text-align:left;border-radius:.55rem;background:var(--background)}
+.meeting-list-add button.selected{background:var(--brand-soft);color:var(--brand-strong)}.meeting-list-add button.meeting-list-add-confirm{justify-content:center;background:var(--primary);color:var(--primary-foreground)}
+.meeting-list-add svg{width:1rem}.meeting-list-grid{display:grid;gap:.7rem}
+.meeting-list-member{display:grid;gap:.65rem;padding:.9rem;border:1px solid var(--border);border-radius:.8rem;background:var(--background)}
+.meeting-list-member>div:first-child{display:grid;gap:.2rem}.meeting-list-member small{color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.04em}.meeting-list-member span,.meeting-list-member p{color:var(--muted-foreground)}
+.meeting-list-inline{padding-top:.6rem;border-top:1px solid var(--border)}.meeting-list-inline label{display:grid;gap:.25rem;font-size:.8rem}.meeting-list-inline input{width:10rem}
+.today-meeting-lists{grid-column:1/-1}.today-meeting-list{margin-top:.8rem}.today-meeting-list h3{display:flex;gap:.5rem;align-items:center}.today-meeting-list h3 span{font-size:.75rem;background:var(--muted);padding:.15rem .45rem;border-radius:999px}
+.today-meeting-list>div{display:flex;gap:.5rem;align-items:center;padding:.55rem 0;border-bottom:1px solid var(--border)}.today-meeting-list>div>button:first-child{display:grid;gap:.1rem;flex:1;text-align:left}.today-meeting-list small{color:var(--muted-foreground)}
+@media(max-width:700px){.meeting-list-actions,.meeting-list-inline,.meeting-list-create{align-items:stretch}.meeting-list-actions button{flex:1}.meeting-list-inline label,.meeting-list-inline input{width:100%}.today-meeting-list>div{flex-wrap:wrap}.today-meeting-list>div>button:first-child{flex-basis:100%}}

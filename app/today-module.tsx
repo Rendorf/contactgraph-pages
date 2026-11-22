@@ -8,6 +8,7 @@ import type { CalendarData } from "./calendar-data";
 import { needsAttention, type CalendarContact, type CalendarEvent } from "./calendar-model";
 import type { Meeting } from "./meetings-module";
 import type { WorkspaceModule } from "./module-registry";
+import { MeetingListsToday } from "./meeting-lists";
 
 const displayDate = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
 
@@ -17,11 +18,12 @@ function eventKind(event: CalendarEvent, today: string) {
   return { label: event.date < today ? "Overdue follow-up" : "Follow-up", icon: Clock3 };
 }
 
-export function TodayModule({ contacts, data, onOpenContact, onSelect }: {
+export function TodayModule({ contacts, data, onOpenContact, onSelect, onAddMeetingNotes }: {
   contacts: CalendarContact[];
   data: CalendarData;
   onOpenContact: (id: string) => void;
   onSelect: (module: WorkspaceModule) => void;
+  onAddMeetingNotes: (id: string) => void;
 }) {
   const { user, can } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -72,5 +74,6 @@ export function TodayModule({ contacts, data, onOpenContact, onSelect }: {
         </section>
       </aside>
     </div>
+    <MeetingListsToday onOpenContact={onOpenContact} onAddMeetingNotes={onAddMeetingNotes} />
   </section>;
 }

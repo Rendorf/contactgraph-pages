@@ -236,7 +236,7 @@ function ContactEditor({ contact, contacts, tagSuggestions, organizationSuggesti
             <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-2xl bg-[#172f3d] text-base font-bold text-white">{draft.photo_file ? <img className="size-full object-cover" src={draft.photo_url || `/api/contacts/${encodeURIComponent(draft.id)}/photo?v=${encodeURIComponent(draft.photo_file)}`} alt="" /> : initials(draft.name)}</div>
             <div className="min-w-0"><p className="truncate text-lg font-semibold">{draft.name || "Unnamed contact"}</p><p className="truncate text-sm text-[#647985]">{draft.organization || "No organization"}</p></div>
           </div>
-          {!offline && !isNew && can("contacts.merge") && <Button type="button" variant="outline" className="mb-5 w-full bg-white" onClick={() => onMerge(draft)}><GitMerge />Merge with another contact</Button>}
+          {!offline && !isNew && can("contacts.merge") && can("followups.view") && can("followups.manage") && <Button type="button" variant="outline" className="mb-5 w-full bg-white" onClick={() => onMerge(draft)}><GitMerge />Merge with another contact</Button>}
           <div className="editor-contact-methods">
             {draft.emails?.find((item) => item.address)?.address ? <a href={`mailto:${draft.emails.find((item) => item.address)?.address}`}><Mail /><span><small>Primary email</small><strong>{draft.emails.find((item) => item.address)?.address}</strong></span></a> : <div className="missing"><Mail /><span><small>Primary email</small><strong>Not recorded</strong></span></div>}
             {draft.phones?.find((item) => item.number)?.number ? <a href={`tel:${draft.phones.find((item) => item.number)?.number}`}><Phone /><span><small>Primary phone</small><strong>{draft.phones.find((item) => item.number)?.number}</strong></span></a> : <div className="missing"><Phone /><span><small>Primary phone</small><strong>Not recorded</strong></span></div>}
@@ -560,9 +560,10 @@ export default function Home() {
   const visibleModule = ["holidays", "notifications"].includes(activeModule) ? "calendar" : moduleAllowed(activeModule) ? activeModule : "contacts";
   useEffect(() => {
     if (!designPreview.mounted) return;
-    setActiveModule((current) => designPreview.enabled
+    const timer = window.setTimeout(() => setActiveModule((current) => designPreview.enabled
       ? current === "contacts" ? "today" : current
-      : ["today", "more"].includes(current) ? "contacts" : current);
+      : ["today", "more"].includes(current) ? "contacts" : current), 0);
+    return () => window.clearTimeout(timer);
   }, [designPreview.enabled, designPreview.mounted]);
   const [osintAvailable, setOsintAvailable] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -612,6 +613,7 @@ export default function Home() {
   const [mergeFromDetails, setMergeFromDetails] = useState(false);
   const [tagMergeOpen, setTagMergeOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(todayInBaku);
+  const [meetingPrefill, setMeetingPrefill] = useState("");
   const calendarData = useCalendarData(contacts, calendarMonth);
   const bakuToday = calendarData.today;
   const calendarCount = attentionCount(calendarData.events, bakuToday);
@@ -875,6 +877,11 @@ export default function Home() {
     setActiveModule(module);
     setNavigationOpen(false);
   };
+  const openMeetingNotes = useCallback((contactId: string) => {
+    setMeetingPrefill(contactId);
+    setActiveModule("meetings");
+    setNavigationOpen(false);
+  }, []);
   const clearTags = () => { setSelectedTags([]); setVisibleCount(80); };
   const tagFilterProps = { counts: tagCounts, selected: selectedTags, query: tagQuery, onQueryChange: setTagQuery, onToggle: toggleTag, onClear: clearTags, onMerge: () => setTagMergeOpen(true) };
   const updatePositions = (values: string[]) => { setSelectedPositions(values); setSelectedLetter(""); setVisibleCount(80); };
@@ -909,10 +916,10 @@ export default function Home() {
         <OfflineStatus /><Button className="header-signout" size="sm" variant="outline" onClick={() => void signOut()}>Sign out</Button><div className="header-avatar">{user?.display_name?.slice(0, 2).toUpperCase() || "VK"}</div>
       </header>
 
-      {visibleModule === "today" ? <TodayModule contacts={contacts} data={calendarData} onOpenContact={openContactById} onSelect={selectModule} /> : visibleModule === "more" ? <MoreModule osintAvailable={osintAvailable} onSelect={selectModule} /> : visibleModule === "contacts" ? <div className="contacts-module">
+      {visibleModule === "today" ? <TodayModule contacts={contacts} data={calendarData} onOpenContact={openContactById} onSelect={selectModule} onAddMeetingNotes={openMeetingNotes} /> : visibleModule === "more" ? <MoreModule osintAvailable={osintAvailable} onSelect={selectModule} /> : visibleModule === "contacts" ? <div className="contacts-module">
         <aside className="tag-sidebar overflow-y-auto"><div className="flex min-h-0 flex-1 flex-col"><ContactAttributeFilters {...attributeFilterProps} /><TagFilter {...tagFilterProps} /></div></aside>
         <section className="contacts-content">
-          <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{selectedPositions.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updatePositions([])}><span className="truncate">Position: {selectedPositions.length === 1 ? selectedPositions[0] : `${selectedPositions.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedOrganizations.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updateOrganizations([])}><span className="truncate">Organization: {selectedOrganizations.length === 1 ? selectedOrganizations[0] : `${selectedOrganizations.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || can("contacts.merge")) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
+          <div className="module-heading"><div><p className="eyebrow">Directory</p><h1 className="module-title">{filteredContacts.length.toLocaleString()} contacts</h1><p className="module-subtitle">Manage people, details, tags and notes.</p></div><div className="flex max-w-xl flex-wrap justify-end gap-2">{selectedPositions.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updatePositions([])}><span className="truncate">Position: {selectedPositions.length === 1 ? selectedPositions[0] : `${selectedPositions.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedOrganizations.length > 0 && <button className="tag-pill max-w-full bg-white" onClick={() => updateOrganizations([])}><span className="truncate">Organization: {selectedOrganizations.length === 1 ? selectedOrganizations[0] : `${selectedOrganizations.length} selected`}</span><X className="size-3.5 shrink-0" /></button>}{selectedTags.map((tag) => <button className="tag-pill bg-white" key={tag} onClick={() => toggleTag(tag)}>{tag}<X className="size-3.5" /></button>)}{can("contacts.create") && <Button className="bg-[#172f3d] text-white hover:bg-[#24495c]" onClick={addContact}><Plus />Add contact</Button>}{(can("tags.edit") || can("contacts.delete") || (can("contacts.merge") && can("followups.view") && can("followups.manage"))) && <Button variant={selectionMode ? "secondary" : "outline"} className="bg-white" onClick={() => selectionMode ? closeSelection() : setSelectionMode(true)}><CheckSquare2 />{selectionMode ? "Cancel selection" : "Select contacts"}</Button>}</div></div>
           {!loading && <nav className="contact-alphabet" aria-label="Filter contacts by first letter">
             <button className={selectedLetter === "" ? "active" : ""} type="button" aria-pressed={selectedLetter === ""} onClick={() => { setSelectedLetter(""); setVisibleCount(80); }}>All</button>
             {availableLetters.map((letter) => <button className={selectedLetter === letter ? "active" : ""} type="button" key={letter} aria-pressed={selectedLetter === letter} aria-label={letter === "#" ? "Names not starting with a letter" : `Names starting with ${letter}`} onClick={() => { setSelectedLetter(letter); setVisibleCount(80); }}>{letter}</button>)}
@@ -923,7 +930,7 @@ export default function Home() {
               <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set(filteredContacts.map((contact) => contact.id)))}>Select filtered ({filteredContacts.length.toLocaleString()})</Button>
               {can("tags.edit") && <Button variant="outline" size="sm" disabled={selectedIds.size === 0} onClick={() => openBulkAction("add-tag")}><Plus />Add tag</Button>}
               {can("tags.edit") && <Button variant="outline" size="sm" disabled={selectedIds.size === 0} onClick={() => openBulkAction("remove-tag")}><Tag />Remove tag</Button>}
-              {!offline && can("contacts.merge") && <Button variant="outline" size="sm" disabled={selectedIds.size < 2 || selectedIds.size > 50} onClick={() => setContactMergeOpen(true)}><GitMerge />Merge</Button>}
+              {!offline && can("contacts.merge") && can("followups.view") && can("followups.manage") && <Button variant="outline" size="sm" disabled={selectedIds.size < 2 || selectedIds.size > 50} onClick={() => setContactMergeOpen(true)}><GitMerge />Merge</Button>}
               {!offline && can("contacts.delete") && <Button variant="destructive" size="sm" disabled={selectedIds.size === 0} onClick={() => openBulkAction("delete")}><Trash2 />Delete</Button>}
             </div>
           </div>}
@@ -941,7 +948,7 @@ export default function Home() {
             {(contact.labels ?? []).length > 0 && <div className="contact-card-tags">{(contact.labels ?? []).slice(0, 4).map((label) => <button className="small-tag" key={label} onClick={() => toggleTag(label)}>{label}</button>)}{(contact.labels ?? []).length > 4 && <span className="small-tag">+{(contact.labels ?? []).length - 4}</span>}</div>}
           </article>; })}</div>{visibleCount < filteredContacts.length && <div className="mt-7 flex justify-center"><Button variant="outline" className="h-11 rounded-xl bg-white px-6" onClick={() => setVisibleCount((count) => count + 80)}>Show more</Button></div>}</>}
         </section>
-      </div> : visibleModule === "graph" ? <ContactGraph contacts={contacts} onSelectContact={openContactById} /> : visibleModule === "calendar" ? <CalendarModule contacts={contacts} data={calendarData} month={calendarMonth} onMonthChange={setCalendarMonth} onOpenContact={openContactById} onOpenSettings={() => setActiveModule(can("settings.manage") ? "settings" : "account")} /> : visibleModule === "duplicates" ? <DuplicatesModule contacts={contacts} onOpenContact={openContactById} onMerge={mergeDuplicatePair} onDelete={deleteDuplicateContacts} /> : visibleModule === "meetings" ? <MeetingsModule contacts={contacts} /> : visibleModule === "followups" ? <FollowupsModule contacts={contacts} onOpenContact={openContactById} /> : visibleModule === "canva" ? <CanvaModule contacts={contacts} /> : visibleModule === "osint" ? <OsintModule contacts={contacts} onContactUpdated={(contact) => setContacts(current => current.map(item => item.id === contact.id ? contact as Contact : item))} /> : <SettingsArea section={visibleModule as SettingsSection} onSelect={setActiveModule} />}
+      </div> : visibleModule === "graph" ? <ContactGraph contacts={contacts} onSelectContact={openContactById} /> : visibleModule === "calendar" ? <CalendarModule contacts={contacts} data={calendarData} month={calendarMonth} onMonthChange={setCalendarMonth} onOpenContact={openContactById} onOpenSettings={() => setActiveModule(can("settings.manage") ? "settings" : "account")} /> : visibleModule === "duplicates" ? <DuplicatesModule contacts={contacts} onOpenContact={openContactById} onMerge={mergeDuplicatePair} onDelete={deleteDuplicateContacts} /> : visibleModule === "meetings" ? <MeetingsModule contacts={contacts} prefillContactId={meetingPrefill} onPrefillConsumed={() => setMeetingPrefill("")} /> : visibleModule === "followups" ? <FollowupsModule contacts={contacts} onOpenContact={openContactById} onAddMeetingNotes={openMeetingNotes} /> : visibleModule === "canva" ? <CanvaModule contacts={contacts} /> : visibleModule === "osint" ? <OsintModule contacts={contacts} onContactUpdated={(contact) => setContacts(current => current.map(item => item.id === contact.id ? contact as Contact : item))} /> : <SettingsArea section={visibleModule as SettingsSection} onSelect={setActiveModule} />}
     </div>
 
     {!designPreview.enabled && <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}><SheetContent side="left" className="mobile-navigation-sheet w-[82vw] bg-[#172f3d] p-5 text-white sm:max-w-xs"><SheetHeader className="mb-7 px-0"><SheetTitle className="text-white">ContactGraph</SheetTitle><SheetDescription className="text-[#a9bbc4]">Choose a workspace module.</SheetDescription></SheetHeader><Navigation activeModule={visibleModule} contactCount={contacts.length} calendarCount={calendarCount} calendarError={Boolean(calendarData.error)} followupCount={followupCount} osintAvailable={osintAvailable} mobile onSelect={selectModule} /><Button className="mobile-signout" variant="outline" onClick={() => void signOut()}>Sign out</Button></SheetContent></Sheet>}

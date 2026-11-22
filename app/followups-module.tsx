@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "./auth-context";
+import { MeetingListsWorkspace } from "./meeting-lists";
 
 type Contact = { id: string; name: string; organization?: string; is_net?: boolean };
 type Meeting = { date: string; insights: string } | null;
@@ -22,7 +23,7 @@ const bakuToday = () => {
 const readableDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 const tomorrow = (value: string) => new Date(Date.parse(`${value}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
-export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact[]; onOpenContact: (id: string) => void }) {
+export function FollowupsModule({ contacts, onOpenContact, onAddMeetingNotes }: { contacts: Contact[]; onOpenContact: (id: string) => void; onAddMeetingNotes: (id: string) => void }) {
   const { can } = useAuth();
   const [data, setData] = useState<Followups | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -133,6 +134,7 @@ export function FollowupsModule({ contacts, onOpenContact }: { contacts: Contact
   return <main className="followups-module">
     <div className="module-heading"><div><p className="eyebrow">Relationship rhythm</p><h1 className="module-title">Who should I contact this week?</h1><p className="module-subtitle">A shared view of planned next steps and timely reconnections.</p></div><div className="meeting-count"><CalendarClock />Week ending {readableDate(data?.week_end || bakuToday())}</div></div>
     <div className="followup-stats"><div><strong>{due.length}</strong><span>Due this week</span></div><div><strong>{overdue}</strong><span>Overdue</span></div><div><strong>{entries.filter((entry) => entry.kind === "suggestion").length}</strong><span>Net suggestions</span></div></div>
+    <MeetingListsWorkspace contacts={contacts} onOpenContact={onOpenContact} onAddMeetingNotes={onAddMeetingNotes} />
     {can("followups.manage") && <section className="followup-create"><div><h2>Set a next step</h2><p>Choose a person and a date. Your assistant will see the same queue.</p></div><div className="followup-form"><div className="followup-contact-picker"><Input value={contactQuery} onChange={(event) => { setContactQuery(event.target.value); setContactId(""); }} placeholder="Find a contact…" aria-label="Find a contact" />{matches.length > 0 && !selected && <div className="followup-matches">{matches.map((contact) => <button key={contact.id} onClick={() => { setContactId(contact.id); setContactQuery(contact.name); }}>{contact.name}{contact.organization ? ` · ${contact.organization}` : ""}</button>)}</div>}</div><Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder="Next step, e.g. ask about the proposal" aria-label="Next step" /><Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} aria-label="Due date" /><Button disabled={busy || !selected || !title.trim() || !dueDate} onClick={() => { void mutate({ type: "create", contact_id: contactId, title: title.trim(), due_date: dueDate }, "Follow-up added").then((saved) => { if (saved) { setTitle(""); setContactId(""); setContactQuery(""); } }); }}><Plus />Add follow-up</Button></div></section>}
     <section className="followup-list"><div className="followup-section-head"><div><h2>This week</h2><p>Overdue items stay here until completed or rescheduled.</p></div>{due.length > 10 && <Button size="sm" variant="ghost" onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${due.length}`}<ChevronDown /></Button>}</div>{!data ? <div className="followup-empty">{loadError ? <>{loadError} <Button size="sm" variant="outline" onClick={() => void load().catch(() => setLoadError("Follow-ups could not be loaded."))}>Retry</Button></> : "Loading follow-ups…"}</div> : due.length ? <div className="followup-grid">{(showAll ? due : due.slice(0, 10)).map(renderEntry)}</div> : <p className="followup-empty">Nothing due this week. Set a next step above or log a meeting with a Net contact.</p>}</section>
     {upcoming.length > 0 && <section className="followup-list"><div className="followup-section-head"><div><h2>Coming up</h2><p>Scheduled beyond this week.</p></div></div><div className="followup-grid">{upcoming.slice(0, showAll ? undefined : 10).map(renderEntry)}</div>{upcoming.length > 10 && <Button size="sm" variant="ghost" onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${upcoming.length}`}</Button>}</section>}

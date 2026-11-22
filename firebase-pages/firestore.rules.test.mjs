@@ -13,6 +13,8 @@ await env.withSecurityRulesDisabled(async (context) => {
   await db.doc("members/tagger@example.com").set({ id: "tagger@example.com", email: "tagger@example.com", role_id: "tagger", active: true });
   await db.doc("roles/assistant").set({ id: "assistant", name: "Assistant", permissions: ["contacts.view", "contacts.create", "contacts.edit", "meetings.view"] });
   await db.doc("roles/tagger").set({ id: "tagger", name: "Tag editor", permissions: ["contacts.view", "tags.edit"] });
+  await db.doc("members/followup-viewer@example.com").set({ id: "followup-viewer@example.com", email: "followup-viewer@example.com", role_id: "followup-viewer", active: true });
+  await db.doc("roles/followup-viewer").set({ id: "followup-viewer", name: "Follow-up viewer", permissions: ["contacts.view", "followups.view"] });
   for (const role of ["merger", "merger-deleter"]) {
     await db.doc(`members/${role}@example.com`).set({ email: `${role}@example.com`, role_id: role, active: true });
     await db.doc(`roles/${role}`).set({ id: role, permissions: ["contacts.view", "contacts.merge", ...(role === "merger-deleter" ? ["contacts.delete"] : [])] });
@@ -100,6 +102,31 @@ test("meeting recordings require a meeting, valid metadata, and meeting permissi
   await assertSucceeds(ownerFile.put(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]), metadata));
   await assertSucceeds(assistantFiles.ref(ownerFile.fullPath).getDownloadURL());
   await assertFails(ownerFiles.ref("meeting-recordings/meeting-1/bad.webm").put(new Uint8Array([1]), { contentType: "text/plain", customMetadata: { meetingId: "meeting-1", recordingId: "bad", sha256: "b".repeat(64) } }));
+});
+
+test("meeting lists enforce follow-up permissions, references, and schedule fields", async () => {
+  await env.withSecurityRulesDisabled(async (context) => context.firestore().doc("contacts/meeting-list-person").set(contact("meeting-list-person", 1, "migration")));
+  const viewer = google("followup-viewer@example.com", "followup-viewer-uid");
+  const list = { id: "list-1", name: "Monthly network", cadence_days: 30, revision: 1, updated_at: "2026-11-22T10:00:00Z", updated_by: "owner-uid" };
+  const member = { id: "mlm-" + "a".repeat(40), list_id: "list-1", contact_id: "meeting-list-person", cadence_days: null, snoozed_until: null, last_contact_on: null, joined_on: "2026-11-22", revision: 1, updated_at: "2026-11-22T10:00:00Z", updated_by: "owner-uid" };
+  await assertFails(assistant.doc("meeting_lists/list-1").get());
+  await assertSucceeds(owner.doc("meeting_lists/list-1").set(list));
+  await assertSucceeds(viewer.doc("meeting_lists/list-1").get());
+  await assertFails(viewer.doc("meeting_lists/list-2").set({ ...list, id: "list-2", updated_by: "followup-viewer-uid" }));
+  await assertFails(owner.doc("meeting_list_members/bad-contact").set({ ...member, id: "bad-contact", contact_id: "missing" }));
+  await assertFails(owner.doc("meeting_list_members/bad-date").set({ ...member, id: "bad-date", joined_on: "2026-02-30" }));
+  await assertFails(owner.doc("meeting_list_members/bad-cadence").set({ ...member, id: "bad-cadence", cadence_days: 2 }));
+  await assertFails(owner.doc("meeting_list_members/extra").set({ ...member, id: "extra", unexpected: true }));
+  await assertSucceeds(owner.doc(`meeting_list_members/${member.id}`).set(member));
+  await assertSucceeds(viewer.doc(`meeting_list_members/${member.id}`).get());
+  await assertSucceeds(google("merger-deleter@example.com", "merger-deleter-uid").doc(`meeting_list_members/${member.id}`).get());
+  await assertFails(viewer.doc(`meeting_list_members/${member.id}`).delete());
+  await assertFails(owner.doc(`meeting_list_members/${member.id}`).set({ ...member, contact_id: "person-1", revision: 2 }));
+  const cleanup = owner.batch();
+  cleanup.delete(owner.doc("contacts/meeting-list-person"));
+  cleanup.delete(owner.doc(`meeting_list_members/${member.id}`));
+  await assertSucceeds(cleanup.commit());
+  await assertSucceeds(owner.doc("meeting_lists/list-1").delete());
 });
 
 test("merge permission cannot delete contacts; an authorized merge is atomic", async () => {

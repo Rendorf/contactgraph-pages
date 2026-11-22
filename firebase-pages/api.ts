@@ -1,4 +1,5 @@
 import { validDate, occurrenceId } from "../app/calendar-model";
+import { meetingListSchedule } from "../app/meeting-lists-model";
 import { validateKanban } from "../app/canvas-kanban";
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, runTransaction, setDoc, writeBatch } from "firebase/firestore";
 import { isTrustedDevice, requireFirebase, secureSignOut } from "./firebase";
@@ -11,6 +12,8 @@ import { hermesOsintFetch, hermesRequest } from "./hermes-api";
 import { deleteLocalRecording, deleteLocalRecordingsForMeeting, getLocalRecording, listLocalRecordings, saveLocalRecording } from "./recording-store";
 import { paginateTimeline, timelineEntries } from "../scripts/contact-timeline.mjs";
 
+// This adapter normalizes heterogeneous Firestore documents at each route boundary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = Record<string, any>;
 type Item = Json & { id: string; revision?: number };
 const originalFetch = window.fetch.bind(window);
@@ -145,7 +148,7 @@ const todayBaku = () => {
 };
 const addDays = (date: string, count: number) => new Date(Date.parse(`${date}T12:00:00Z`) + count * 86400000).toISOString().slice(0, 10);
 async function followupsView() {
-  const [contacts, meetings, actions, settings] = await Promise.all([readRows("contacts"), readRows("meetings"), readRows("followup_actions"), readRows("followup_settings")]);
+  const [contacts, meetings, actions, settings, listMembers] = await Promise.all([readRows("contacts"), readRows("meetings"), readRows("followup_actions"), readRows("followup_settings"), readRows("meeting_list_members")]);
   const byId = new Map(contacts.map((item) => [item.id, item]));
   const lastMeetings = new Map<string, Item>();
   for (const item of meetings.sort((a, b) => String(b.date).localeCompare(String(a.date)))) for (const id of (item.contact_ids ?? [item.contact_id])) if (!lastMeetings.has(id)) lastMeetings.set(id, item);
@@ -162,7 +165,7 @@ async function followupsView() {
   }
   const suggestions = [] as Json[];
   for (const contact of contacts) {
-    if (!contact.labels?.includes("Net") || openContacts.has(contact.id)) continue;
+    if (!contact.labels?.includes("Net") || openContacts.has(contact.id) || listMembers.some((item) => item.contact_id === contact.id)) continue;
     const lastMeeting = lastMeetings.get(contact.id);
     const lastActivity = [String(lastMeeting?.date ?? ""), completed.get(contact.id) || ""].sort().at(-1) || "";
     if (!lastActivity) continue;
@@ -175,6 +178,100 @@ async function followupsView() {
   }
   suggestions.sort((a, b) => a.due_date.localeCompare(b.due_date) || a.contact.name.localeCompare(b.contact.name));
   return { today, week_end: weekEnd, actions: active, suggestions, settings: settingsById };
+}
+const meetingListMemberId = async (listId: string, contactId: string) => {
+  cleanId(listId); cleanId(contactId);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${listId}\n${contactId}`)));
+  return "mlm-" + [...digest].map((value) => value.toString(16).padStart(2, "0")).join("").slice(0, 40);
+};
+async function meetingListsView() {
+  const [lists, members, contacts, meetings] = await Promise.all([readRows("meeting_lists"), readRows("meeting_list_members"), readRows("contacts"), readRows("meetings")]);
+  const today = todayBaku();
+  const listById = new Map(lists.map((item) => [item.id, item]));
+  const contactById = new Map(contacts.map((item) => [item.id, item]));
+  const lastMeetings = new Map<string, Item>();
+  for (const item of meetings.filter((meeting) => validDate(meeting.date) && meeting.date <= today).sort((a, b) => String(b.date).localeCompare(String(a.date)))) {
+    for (const id of item.contact_ids ?? [item.contact_id]) if (!lastMeetings.has(id)) lastMeetings.set(id, item);
+  }
+  const output = members.flatMap((item) => {
+    const list = listById.get(item.list_id), contact = contactById.get(item.contact_id);
+    if (!list || !contact) return [];
+    const meeting = lastMeetings.get(item.contact_id);
+    const schedule = meetingListSchedule({ cadence_days: item.cadence_days, joined_on: item.joined_on,
+      last_contact_on: item.last_contact_on, snoozed_until: item.snoozed_until }, Number(list.cadence_days), meeting?.date, today);
+    return [{ ...item, ...schedule, last_meeting: meeting ?? null, contact }];
+  }).sort((a, b) => a.due_date.localeCompare(b.due_date) || String(a.contact.name).localeCompare(String(b.contact.name)));
+  return { today, lists: lists.sort((a, b) => String(a.name).localeCompare(String(b.name))), members: output };
+}
+const listPayloadKeys = (body: Json, keys: string[]) => {
+  if (Object.keys(body).some((key) => !keys.includes(key))) throw new Error("Meeting-list request contains unsupported fields.");
+};
+async function mutateMeetingList(body: Json) {
+  const cadence = (value: unknown, optional = false) => {
+    if (optional && value == null) return null;
+    if (!Number.isInteger(value) || Number(value) < 7 || Number(value) > 365) throw new Error("Choose a cadence from 7 to 365 days.");
+    return Number(value);
+  };
+  if (body.type === "create-list") {
+    listPayloadKeys(body, ["type", "name", "cadence_days"]);
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const lists = await readRows("meeting_lists");
+    if (!name || name.length > 80 || lists.length >= 100 || lists.some((item) => String(item.name).toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("Enter a unique list name of up to 80 characters.");
+    const id = crypto.randomUUID();
+    await put("meeting_lists", { id, name, cadence_days: cadence(body.cadence_days) }, true);
+    return { id, created: true };
+  }
+  if (body.type === "update-list") {
+    listPayloadKeys(body, ["type", "id", "name", "cadence_days"]);
+    const prior = await readOne("meeting_lists", cleanId(body.id));
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!prior || !name || name.length > 80 || (await readRows("meeting_lists")).some((item) => item.id !== prior.id && String(item.name).toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("Choose a valid, unique meeting list.");
+    await put("meeting_lists", { ...prior, name, cadence_days: cadence(body.cadence_days) }, false); return { id: prior.id, updated: true };
+  }
+  if (body.type === "delete-list") {
+    listPayloadKeys(body, ["type", "id"]); const id = cleanId(body.id);
+    if (!await readOne("meeting_lists", id)) throw new Error("Choose a valid meeting list.");
+    for (const member of (await readRows("meeting_list_members")).filter((item) => item.list_id === id)) await remove("meeting_list_members", member.id);
+    await remove("meeting_lists", id); return { id, deleted: true };
+  }
+  if (body.type === "add-members") {
+    listPayloadKeys(body, ["type", "list_id", "contact_ids"]); const listId = cleanId(body.list_id);
+    if (!await readOne("meeting_lists", listId) || !Array.isArray(body.contact_ids) || body.contact_ids.length < 1 || body.contact_ids.length > 100) throw new Error("Choose a valid list and 1 to 100 people.");
+    const contacts = new Set((await readRows("contacts")).map((item) => item.id));
+    const members = await readRows("meeting_list_members"); let added = 0;
+    const contactIds = [...new Set(body.contact_ids as string[])];
+    for (const contactId of contactIds) {
+      cleanId(contactId);
+      if (!contacts.has(contactId)) throw new Error("Contact not found.");
+      if (members.filter((item) => item.contact_id === contactId).length >= 50) throw new Error("Meeting-list membership limit reached.");
+    }
+    const newIds = contactIds.filter((contactId) => !members.some((item) => item.list_id === listId && item.contact_id === contactId));
+    if (members.filter((item) => item.list_id === listId).length + newIds.length > 400) throw new Error("Meeting-list membership limit reached.");
+    for (const contactId of newIds) {
+      await put("meeting_list_members", { id: await meetingListMemberId(listId, contactId), list_id: listId, contact_id: contactId,
+        cadence_days: null, snoozed_until: null, last_contact_on: null, joined_on: todayBaku() }, true); added++;
+    }
+    return { list_id: listId, added };
+  }
+  if (body.type === "update-member") {
+    listPayloadKeys(body, ["type", "id", "cadence_days", "snoozed_until"]); const prior = await readOne("meeting_list_members", cleanId(body.id));
+    if (!prior || (body.snoozed_until != null && (!validDate(body.snoozed_until) || body.snoozed_until <= todayBaku()))) throw new Error("Choose a valid member and future snooze date.");
+    await put("meeting_list_members", { ...prior, cadence_days: cadence(body.cadence_days, true), snoozed_until: body.snoozed_until ?? null }, false); return { id: prior.id, updated: true };
+  }
+  if (body.type === "delete-member") {
+    listPayloadKeys(body, ["type", "id"]); const id = cleanId(body.id);
+    if (!await readOne("meeting_list_members", id)) throw new Error("Meeting-list member not found.");
+    await remove("meeting_list_members", id); return { id, deleted: true };
+  }
+  if (body.type === "mark-met") {
+    listPayloadKeys(body, ["type", "contact_id"]); const contactId = cleanId(body.contact_id);
+    if (!await readOne("contacts", contactId)) throw new Error("Contact not found.");
+    const matches = (await readRows("meeting_list_members")).filter((item) => item.contact_id === contactId);
+    if (!matches.length) throw new Error("This person is not on a meeting list.");
+    for (const item of matches) await put("meeting_list_members", { ...item, last_contact_on: todayBaku(), snoozed_until: null }, false);
+    return { contact_id: contactId, updated: matches.length };
+  }
+  throw new Error("Unknown meeting-list action.");
 }
 const refreshContacts = () => window.dispatchEvent(new Event("contactgraph:sync"));
 async function batchContacts(ids: string[], transform: (item: Item) => Item | null) {
@@ -262,13 +359,16 @@ async function createLinks(body: Json) {
 }
 async function mergeContacts(body: Json): Promise<Item> {
   online();
+  const permissions = await currentPermissions();
+  const allowed = (permission: string) => permissions.includes("*") || permissions.includes(permission);
+  if (!allowed("followups.view") || !allowed("followups.manage")) throw new Error("Merging contacts also requires permission to preserve their meeting-list schedules.");
   const ids = body.source_ids;
   const targetId = body.target_id;
   if (!Array.isArray(ids) || ids.length < 2 || ids.length > 20 || ids.some((id) => typeof id !== "string") || new Set(ids).size !== ids.length || !ids.includes(targetId) || body.contact?.id !== targetId || typeof body.contact.name !== "string" || !body.contact.name.trim()) throw new Error("Choose distinct contacts and a valid surviving contact.");
   ids.forEach(cleanId);
   const sources = new Set(ids.filter((id) => id !== targetId));
   const { db, auth } = requireFirebase();
-  const [meetings, actions, settings, canvases, messages, photos] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "holiday_messages", "photo_chunks"].map(name => readAll(name)));
+  const [meetings, actions, settings, canvases, messages, photos, listMembers] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "holiday_messages", "photo_chunks", "meeting_list_members"].map(name => readAll(name)));
   const related: Array<{ name: string; item: Item }> = [];
   for (const item of meetings) if ((item.contact_ids ?? [item.contact_id]).some((id: string) => sources.has(id))) related.push({ name: "meetings", item });
   for (const item of actions) if (sources.has(item.contact_id)) related.push({ name: "followup_actions", item });
@@ -276,6 +376,13 @@ async function mergeContacts(body: Json): Promise<Item> {
   for (const item of canvases) if (item.nodes?.some((node: Json) => node.contact_ids?.some((id: string) => sources.has(id)))) related.push({ name: "canvases", item });
   for (const item of messages) if (sources.has(item.contact_id)) related.push({ name: "holiday_messages", item });
   for (const item of photos) if (sources.has(item.contact_id) || item.contact_id === targetId) related.push({ name: "photo_chunks", item });
+  for (const item of listMembers) if (sources.has(item.contact_id)) related.push({ name: "meeting_list_members", item });
+  const membershipPlans = await Promise.all([...new Set(listMembers.filter((item) => sources.has(item.contact_id)).map((item) => String(item.list_id)))].map(async (listId) => ({
+    listId,
+    sources: listMembers.filter((item) => sources.has(item.contact_id) && item.list_id === listId).sort((a, b) => a.id.localeCompare(b.id)),
+    target: listMembers.find((item) => item.contact_id === targetId && item.list_id === listId),
+    id: await meetingListMemberId(listId, targetId),
+  })));
   for (const item of await birthdayStates([...sources])) related.push({ name: "calendar_occurrence_states", item });
   // Connections move to the surviving contact (same rules as contact_links.remap_contact_links).
   const links = await linksOf(ids);
@@ -294,15 +401,17 @@ async function mergeContacts(body: Json): Promise<Item> {
     plannedLinks.set(id, { contact_a, contact_b, note: prior ? joinNotes(prior.note, String(item.note ?? "")) : String(item.note ?? ""), base: prior?.base });
   }
   const linkWrites = [...plannedLinks.entries()].map(([id, plan]) => ({ id, ...plan, ref: doc(db, "contact_links", id) }));
-  if (related.length + linkWrites.length + ids.length > 220) throw new Error("This merge has too many linked records for one atomic operation. Review it in the local app.");
+  if (related.length + linkWrites.length + membershipPlans.length + ids.length > 220) throw new Error("This merge has too many linked records for one atomic operation. Review it in the local app.");
   const contactRefs = ids.map((id: string) => doc(db, "contacts", id));
   const relatedRefs = related.map(({ name, item }) => doc(db, name, item.id));
+  const membershipTargetRefs = membershipPlans.map((item) => doc(db, "meeting_list_members", item.id));
   const targetSettingsRef = doc(db, "followup_settings", targetId);
   const saved = await runTransaction(db, async (tx) => {
-    const [contactSnaps, relatedSnaps, targetSettings] = await Promise.all([
+    const [contactSnaps, relatedSnaps, targetSettings, membershipTargetSnaps] = await Promise.all([
       Promise.all(contactRefs.map((ref) => tx.get(ref))),
       Promise.all(relatedRefs.map((ref) => tx.get(ref))),
       tx.get(targetSettingsRef),
+      Promise.all(membershipTargetRefs.map((ref) => tx.get(ref))),
     ]);
     const linkSnaps = await Promise.all(linkWrites.map((item) => tx.get(item.ref)));
     if (contactSnaps.some((snapshot) => !snapshot.exists())) throw new Error("A selected contact changed or was deleted. Refresh first.");
@@ -311,6 +420,8 @@ async function mergeContacts(body: Json): Promise<Item> {
     const oldTarget = current.get(targetId)!;
     if (Number(body.contact.revision ?? 0) !== Number(oldTarget.revision ?? 0)) throw new Error("The surviving contact changed on another device. Refresh first.");
     if (relatedSnaps.some((snapshot) => !snapshot.exists())) throw new Error("Linked data changed on another device. Refresh first.");
+    if (membershipPlans.some((plan, index) => membershipTargetSnaps[index].exists() !== Boolean(plan.target)
+      || (plan.target && Number(membershipTargetSnaps[index].data()?.revision ?? 0) !== Number(plan.target.revision ?? 0)))) throw new Error("Meeting-list schedules changed on another device. Refresh first.");
     if (linkWrites.some((item, index) => linkSnaps[index].exists() !== Boolean(item.base) || (item.base && Number(linkSnaps[index].data()?.revision ?? 0) !== Number(item.base.revision ?? 0)))) throw new Error("Connections changed on another device. Refresh first.");
     const updatedAt = new Date().toISOString();
     const updatedBy = auth.currentUser?.uid ?? "";
@@ -321,7 +432,7 @@ async function mergeContacts(body: Json): Promise<Item> {
     const photoOwner = final.photo_file ? ids.find((id: string) => current.get(id)?.photo_file === final.photo_file) : undefined;
     const existingPhoto = related.filter((row) => row.name === "photo_chunks");
     for (let index = 0; index < related.length; index++) {
-      const { name, item } = related[index];
+      const { name } = related[index];
       const ref = relatedRefs[index];
       const value = relatedSnaps[index].data()!;
       const meta = { revision: Number(value.revision ?? 0) + 1, updated_at: updatedAt, updated_by: updatedBy };
@@ -335,6 +446,8 @@ async function mergeContacts(body: Json): Promise<Item> {
       } else if (name === "followup_settings") {
         tx.delete(ref);
         if (!targetSettings.exists()) tx.set(targetSettingsRef, { ...value, id: targetId, revision: 1, updated_at: updatedAt, updated_by: updatedBy });
+      } else if (name === "meeting_list_members") {
+        tx.delete(ref);
       } else if (name === "calendar_occurrence_states" || name === "contact_links") {
         tx.delete(ref);
       }
@@ -342,6 +455,20 @@ async function mergeContacts(body: Json): Promise<Item> {
     for (const item of linkWrites) {
       const revision = item.base ? Number(item.base.revision ?? 0) + 1 : 1;
       tx.set(item.ref, { id: item.id, contact_a: item.contact_a, contact_b: item.contact_b, note: item.note, revision, updated_at: updatedAt, updated_by: updatedBy });
+    }
+    const membershipValues = new Map(related.map((row, index) => [row.item.id, relatedSnaps[index].data()!]));
+    for (let index = 0; index < membershipPlans.length; index++) {
+      const plan = membershipPlans[index];
+      const values = plan.sources.map((item) => membershipValues.get(item.id)!).filter(Boolean);
+      const latest = [plan.target?.last_contact_on, ...values.map((item) => item.last_contact_on)].filter((value): value is string => typeof value === "string").sort().at(-1) ?? null;
+      if (plan.target) {
+        if (latest !== (plan.target.last_contact_on ?? null)) tx.set(membershipTargetRefs[index], { ...plan.target, last_contact_on: latest,
+          revision: Number(plan.target.revision ?? 0) + 1, updated_at: updatedAt, updated_by: updatedBy });
+      } else {
+        const base = values[0];
+        tx.set(membershipTargetRefs[index], { ...base, id: plan.id, contact_id: targetId, last_contact_on: latest,
+          revision: 1, updated_at: updatedAt, updated_by: updatedBy });
+      }
     }
     if (photoOwner !== targetId) {
       const chosen = existingPhoto.filter((row) => row.item.contact_id === photoOwner);
@@ -370,13 +497,14 @@ async function deleteContact(id: string, expectedRevision?: number) {
   online();
   id = cleanId(id);
   const { db, auth } = requireFirebase();
-  const [meetings, actions, settings, canvases, photos] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "photo_chunks"].map(name => readAll(name)));
+  const [meetings, actions, settings, canvases, photos, listMembers] = await Promise.all(["meetings", "followup_actions", "followup_settings", "canvases", "photo_chunks", "meeting_list_members"].map(name => readAll(name)));
   const related: Array<{ name: string; item: Item }> = [];
   for (const item of meetings) if ((item.contact_ids ?? [item.contact_id]).includes(id)) related.push({ name: "meetings", item });
   for (const item of actions) if (item.contact_id === id) related.push({ name: "followup_actions", item });
   for (const item of settings) if (item.id === id) related.push({ name: "followup_settings", item });
   for (const item of canvases) if (item.nodes?.some((node: Json) => node.contact_ids?.includes(id))) related.push({ name: "canvases", item });
   for (const item of photos) if (item.contact_id === id) related.push({ name: "photo_chunks", item });
+  for (const item of listMembers) if (item.contact_id === id) related.push({ name: "meeting_list_members", item });
   for (const item of await birthdayStates([id])) related.push({ name: "calendar_occurrence_states", item });
   for (const item of await linksOf([id])) related.push({ name: "contact_links", item });
   if (related.length > 180) throw new Error("This contact has too many linked records to delete atomically. Review it in the local app.");
@@ -732,6 +860,8 @@ async function route(url: URL, options?: RequestInit): Promise<Response> {
       }
       return response({ error: "This follow-up action is unavailable in the Pages app." }, 501);
     }
+    if (path === "/api/meeting-lists" && method === "GET") return response(await meetingListsView());
+    if (path === "/api/meeting-lists" && method === "POST") return response(await mutateMeetingList(parse(options)));
     if (path === "/api/osint" || path.startsWith("/api/osint/")) return hermesOsintFetch(path, options);
     return response({ error: "This feature is not yet available in the Firebase Pages app." }, 501);
   } catch (error) { return errorResponse(error); }

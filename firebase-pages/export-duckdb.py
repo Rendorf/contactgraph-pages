@@ -22,6 +22,7 @@ from contactdb import list_canvases, list_contacts, list_holiday_messages, list_
 import contactdb  # noqa: E402
 from calendar_states import list_states  # noqa: E402
 import contact_links  # noqa: E402
+import meeting_lists  # noqa: E402
 
 if not hasattr(contactdb, "validate_canvas_kanban"):
     raise RuntimeError("Update the ContactGraph server code before exporting or synchronizing Kanban boards.")
@@ -58,6 +59,7 @@ def export(database: Path, output: Path, osint_database: Path | None = None) -> 
             identity = json.dumps([post[field] for field in ("holiday_id", "variant", "language", "content", "model", "created_at")],
                                   ensure_ascii=False, separators=(",", ":"))
             post["id"] = "hp-" + hashlib.sha256(identity.encode()).hexdigest()[:40]
+        meeting_list_rows, meeting_member_rows = meeting_lists.list_records(connection)
         data = {
             "contacts": list_contacts(connection),
             "holidays": list_holidays(connection),
@@ -68,6 +70,8 @@ def export(database: Path, output: Path, osint_database: Path | None = None) -> 
             "meeting_recordings": list_meeting_recordings(connection),
             "followup_actions": actions,
             "followup_settings": settings,
+            "meeting_lists": meeting_list_rows,
+            "meeting_list_members": meeting_member_rows,
             "calendar_occurrence_states": list_states(connection),
             "contact_links": [{field: link[field] for field in contact_links.FIELDS} for link in contact_links.list_links(connection)],
             "roles": roles,

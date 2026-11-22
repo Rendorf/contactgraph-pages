@@ -11,6 +11,8 @@
     { "name": "meeting_recordings", "optional": true },
     { "name": "followup_actions" },
     { "name": "followup_settings" },
+    { "name": "meeting_lists", "optional": true },
+    { "name": "meeting_list_members", "optional": true },
     { "name": "calendar_occurrence_states", "optional": true },
     { "name": "contact_links", "optional": true },
     { "name": "osint_settings" },

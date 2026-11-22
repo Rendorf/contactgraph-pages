@@ -3,7 +3,10 @@ import { db, auth, isTrustedDevice } from "./firebase";
 import { toast } from "sonner";
 import { isFirestoreQuotaExceeded } from "./quota.mjs";
 
-export type Pending = { key: string; collection: string; id: string; uid: string; op: "put" | "delete"; item?: Record<string, any>; baseRevision: number; status: "pending" | "conflict"; remote?: Record<string, any> | null; createdAt: string };
+// Offline records preserve the heterogeneous document shape until their route validates it.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type StoredRecord = Record<string, any>;
+export type Pending = { key: string; collection: string; id: string; uid: string; op: "put" | "delete"; item?: StoredRecord; baseRevision: number; status: "pending" | "conflict"; remote?: StoredRecord | null; createdAt: string };
 const DATABASE = "contactgraph-outbox-v1";
 const STORE = "pending";
 const changed = () => window.dispatchEvent(new Event("contactgraph:outbox"));
@@ -41,7 +44,7 @@ const find = async (collection: string, id: string, uid: string) => operation("r
 const save = async (item: Pending) => { await operation("readwrite", (store) => store.put(item)); changed(); };
 const discard = async (item: Pending) => { await operation("readwrite", (store) => store.delete(item.key)); changed(); };
 
-export async function queuePut(collection: string, item: Record<string, any>) {
+export async function queuePut(collection: string, item: StoredRecord) {
   if (!isTrustedDevice()) throw new Error("Enable trusted-device offline access in Settings before editing without a connection.");
   const uid = currentUid();
   const key = keyFor(collection, item.id, uid);
@@ -73,9 +76,16 @@ export async function overlay<T extends { id: string }>(collection: string, rows
   return [...map.values()];
 }
 let syncInFlight: Promise<void> | null = null;
+const dependencyOrder = (item: Pending) => {
+  const create = { contacts: 0, meeting_lists: 10, meetings: 10, meeting_list_members: 20, meeting_recordings: 20 } as Record<string, number>;
+  const remove = { meeting_list_members: 0, meeting_recordings: 0, meeting_lists: 10, meetings: 10, contacts: 20 } as Record<string, number>;
+  return (item.op === "delete" ? remove : create)[item.collection] ?? 10;
+};
 async function runSyncPending() {
   if (!navigator.onLine || !db || !auth?.currentUser || !isTrustedDevice()) return;
-  for (const item of (await getPending()).filter((value) => value.status === "pending")) {
+  const pending = (await getPending()).filter((value) => value.status === "pending")
+    .sort((a, b) => dependencyOrder(a) - dependencyOrder(b) || a.createdAt.localeCompare(b.createdAt) || a.key.localeCompare(b.key));
+  for (const item of pending) {
     const ref = doc(db, item.collection, item.id);
     try {
       const result = await runTransaction(db, async (tx) => {

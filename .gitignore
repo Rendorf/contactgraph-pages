@@ -129,6 +129,7 @@ next-env.d.ts
 !/docs/osint-cloud-backend.md
 !/docs/threat-notes/
 !/docs/threat-notes/appearance-and-timeline-redesign-2026-11-18.md
+!/docs/threat-notes/meeting-lists-2026-11-22.md
 !/package.json
 !/package-lock.json
 !/Dockerfile.cloudrun
@@ -171,5 +172,8 @@ __pycache__/
 !app/calendar-model.tsx
 !app/calendar-data.tsx
 !app/calendar-module.tsx
+!app/meeting-lists.tsx
+!app/meeting-lists-model.ts
 !firebase-pages/calendar.test.mjs
+!firebase-pages/meeting-lists.test.mjs
 !firebase-pages/storage.rules

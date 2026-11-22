@@ -117,7 +117,7 @@ export function ContactMeetingHistory({ contactId, contacts }: { contactId: stri
   </div>;
 }
 
-export function MeetingsModule({ contacts }: { contacts: MeetingContact[] }) {
+export function MeetingsModule({ contacts, prefillContactId, onPrefillConsumed }: { contacts: MeetingContact[]; prefillContactId?: string; onPrefillConsumed?: () => void }) {
   const { can } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [contactIds, setContactIds] = useState<string[]>([]);
@@ -155,6 +155,15 @@ export function MeetingsModule({ contacts }: { contacts: MeetingContact[] }) {
     window.addEventListener("contactgraph:collection:meetings", refresh);
     return () => window.removeEventListener("contactgraph:collection:meetings", refresh);
   }, []);
+  useEffect(() => {
+    if (!prefillContactId || !contacts.some((contact) => contact.id === prefillContactId)) return;
+    const timer = window.setTimeout(() => {
+      setEditingId(null); setContactIds([prefillContactId]); setDate(today()); setInsights("");
+      onPrefillConsumed?.();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [contacts, onPrefillConsumed, prefillContactId]);
   const reset = () => { setEditingId(null); setContactIds([]); setDate(today()); setInsights(""); };
   const persistMeeting = async (allowEmpty = false) => {
     if (!contactIds.length || !date || (!allowEmpty && !insights.trim())) throw new Error("Choose contacts, a date, and add meeting insights.");
