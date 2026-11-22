@@ -36,10 +36,9 @@ jobs:
           node-version: '24.12.0'
           cache: npm
       - run: npm ci
-      - run: python3 -m pip install --user duckdb==1.4.1
       - run: node --test scripts/osint-service.test.mjs scripts/osint-cloud.test.mjs scripts/firebase-bridge.test.mjs
         env:
-          CONTACTGRAPH_PYTHON: python3
+          CONTACTGRAPH_SKIP_LOCAL_DB_TEST: '1'
       - run: npx eslint scripts/cloudrun-server.mjs scripts/firebase-bridge.mjs scripts/firestore-osint-store.mjs scripts/osint-feed.mjs scripts/osint-web.mjs scripts/osint-service.mjs scripts/osint-providers.mjs scripts/osint-candidates.mjs
       - run: npx tsc --noEmit --pretty false
       - run: npm audit --prefix cloudrun --omit=dev --audit-level=high

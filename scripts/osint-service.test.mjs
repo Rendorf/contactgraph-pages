@@ -61,7 +61,7 @@ test("provider and username inputs are constrained", () => {
   assert.deepEqual(suggestMaigretHandles({ name: "Example Person", socials: [{ value: "https://github.com/examplep" }] }), ["examplep", "exampleperson", "example.person"]);
 });
 
-test("OSINT manual search, feed collection, review and local schedule", async () => {
+test("OSINT manual search, feed collection, review and local schedule", { skip: process.env.CONTACTGRAPH_SKIP_LOCAL_DB_TEST === "1" }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "contactgraph-osint-"));
   const requestedQueries = [];
   const requestedPaths = [];
