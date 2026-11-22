@@ -84,7 +84,7 @@ jobs:
             --min 0 \
             --max 1 \
             --timeout 300 \
-            --set-env-vars "CONTACTGRAPH_FIREBASE_PROJECT_ID=$PROJECT_ID,CONTACTGRAPH_FIREBASE_ALLOWED_ORIGINS=https://contacts.vusalkhalilov.com\,https://contactgraph-vusal-2026.web.app,CONTACTGRAPH_SCHEDULER_SERVICE_ACCOUNT=$SCHEDULER_SERVICE_ACCOUNT,CONTACTGRAPH_BRAVE_MONTHLY_LIMIT=2500" \
+            --set-env-vars "^@^CONTACTGRAPH_FIREBASE_PROJECT_ID=$PROJECT_ID@CONTACTGRAPH_FIREBASE_ALLOWED_ORIGINS=https://contacts.vusalkhalilov.com,https://contactgraph-vusal-2026.web.app@CONTACTGRAPH_SCHEDULER_SERVICE_ACCOUNT=$SCHEDULER_SERVICE_ACCOUNT@CONTACTGRAPH_BRAVE_MONTHLY_LIMIT=2500" \
             --set-secrets "BRAVE_SEARCH_API_KEY=brave-search-api-key:latest,OPENAI_API_KEY=openai-api-key:latest"
           SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
           gcloud run services update "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --update-env-vars "CONTACTGRAPH_INTERNAL_AUDIENCE=$SERVICE_URL"
