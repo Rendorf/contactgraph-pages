@@ -68,7 +68,9 @@ jobs:
         with:
           path: firebase-pages-dist
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CONTACTGRAPH_CLOUD_API_READY == 'true'
+    # The managed API is optional at runtime. The client fails closed for API-only
+    # features, so an unavailable backend must not block unrelated frontend releases.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
