@@ -55,8 +55,19 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+      - name: Verify Cloud Build source staging
+        run: |
+          BUCKET="gs://${PROJECT_ID}_cloudbuild"
+          CHECK_OBJECT="$BUCKET/preflight/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          trap 'gcloud storage rm "$CHECK_OBJECT" --quiet >/dev/null 2>&1 || true' EXIT
+          gcloud auth list --filter=status:ACTIVE --format='value(account)'
+          gcloud services describe cloudbuild.googleapis.com --project "$PROJECT_ID" --format='value(state)'
+          gcloud storage buckets describe "$BUCKET" --format='yaml(name,location,uniform_bucket_level_access,public_access_prevention)'
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/cloudbuild-preflight.txt"
+          gcloud storage cp "$RUNNER_TEMP/cloudbuild-preflight.txt" "$CHECK_OBJECT" --quiet
+          gcloud storage rm "$CHECK_OBJECT" --quiet
       - name: Build immutable container
-        run: gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --config cloudrun/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE:$GITHUB_SHA" .
+        run: gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source" --config cloudrun/cloudbuild.yaml --substitutions "_IMAGE=$IMAGE:$GITHUB_SHA" .
       - name: Deploy Cloud Run revision
         env:
           SCHEDULER_SERVICE_ACCOUNT: ${{ vars.GCP_SCHEDULER_SERVICE_ACCOUNT }}
