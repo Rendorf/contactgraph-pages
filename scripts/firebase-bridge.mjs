@@ -216,7 +216,7 @@ export function createFirebaseBridge({ verifyToken, read = firestoreDocument, op
       }
     }
     const origin = String(request.headers.origin || "");
-    if (requestPath === "/healthz" && request.method === "GET") return send(response, 200, { ok: true, service: "contactgraph-osint" });
+    if (requestPath === "/health" && request.method === "GET") return send(response, 200, { ok: true, service: "contactgraph-osint" });
     if (!origins.includes(origin)) return send(response, 403, { error: "Origin is not allowed." });
     if (request.method === "OPTIONS") {
       response.writeHead(204, { ...securityHeaders, "access-control-allow-origin": origin, "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS", "access-control-allow-headers": "Authorization, Content-Type", "access-control-max-age": "600", vary: "Origin", "cache-control": "no-store" });

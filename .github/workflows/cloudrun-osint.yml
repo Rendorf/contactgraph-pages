@@ -104,4 +104,4 @@ jobs:
             gcloud scheduler jobs create http contactgraph-osint-tick --project "$PROJECT_ID" --location "$REGION" --schedule '*/5 * * * *' --time-zone 'Asia/Baku' --uri "$SERVICE_URL/internal/osint/tick" --http-method POST --oidc-service-account-email "$SCHEDULER_SERVICE_ACCOUNT" --oidc-token-audience "$SERVICE_URL" --attempt-deadline 30m
           fi
       - name: Verify health
-        run: curl --fail --silent --show-error "$SERVICE_URL/healthz"
+        run: curl --fail --silent --show-error "$SERVICE_URL/health"

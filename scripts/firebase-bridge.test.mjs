@@ -27,6 +27,15 @@ async function withServer(overrides, run) {
   finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
 }
 
+test("Cloud Run health uses a non-reserved unauthenticated path", async () => {
+  await withServer({}, async (call) => {
+    const response = await call("/health", { headers: { origin: "", authorization: "" } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, service: "contactgraph-osint" });
+    assert.equal((await call("/healthz", { headers: { origin: "", authorization: "" } })).status, 403);
+  });
+});
+
 test("bridge rejects missing origin, token, and invalid identity", async () => {
   await withServer({}, async (call) => {
     assert.equal((await call("/v1/firebase/settings", { headers: { origin: "https://evil.example" } })).status, 403);

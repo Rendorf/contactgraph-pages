@@ -57,7 +57,7 @@ AI message generation uses the managed Cloud Run bridge at `https://api.contacts
 
 The same bridge serves optional OSINT search, review, saved findings, photo previews, and confirmed positions or photos. OSINT state is stored in server-only Firestore collections. The OSINT navigation appears only while the bridge responds and the signed-in user has `osint.view`. Writes require `osint.manage`; confirming a candidate also requires `contacts.edit`. Manual searches use current Firestore contact details. Confirmed contact changes go through Firestore with its rules and a document-version precondition. Authenticated Cloud Scheduler and Cloud Tasks run enabled daily monitors from the canonical Firestore contact data.
 
-The Cloud Run service accepts browser requests only from `https://contacts.vusalkhalilov.com` and `https://contactgraph-vusal-2026.web.app`; `/healthz` is the only unauthenticated route. It needs outbound HTTPS access to Firebase token certificates, OpenAI, Brave Search, and the selected public OSINT providers. Keep the OpenAI and Brave keys in Secret Manager—not GitHub variables, source, Firestore, or the Pages artifact. The former Hermes bridge remains a temporary rollback target during migration only.
+The Cloud Run service accepts browser requests only from `https://contacts.vusalkhalilov.com` and `https://contactgraph-vusal-2026.web.app`; `/health` is the only unauthenticated route. It needs outbound HTTPS access to Firebase token certificates, OpenAI, Brave Search, and the selected public OSINT providers. Keep the OpenAI and Brave keys in Secret Manager—not GitHub variables, source, Firestore, or the Pages artifact. The former Hermes bridge remains a temporary rollback target during migration only.
 
 ## Private backup
 
