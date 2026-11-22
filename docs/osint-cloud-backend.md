@@ -29,7 +29,7 @@
 5. A provider failure returns partial results and a source error without losing successful findings.
 6. Search calls stop when the 2,500 monthly managed-search limit is reached; free providers and saved data remain available.
 7. A repeated scheduler tick cannot launch the same daily collection twice.
-8. An online Owner sees **More → OSINT updates** when authenticated availability succeeds; a denied role or unavailable bridge does not expose OSINT actions.
+8. An online Owner sees **More → OSINT updates** without a speculative availability gate. A bridge failure is reported inside that screen with Retry; a denied role still cannot perform OSINT actions.
 
 ## Rollout and rollback
 
