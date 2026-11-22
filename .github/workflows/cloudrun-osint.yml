@@ -61,7 +61,6 @@ jobs:
           CHECK_OBJECT="$BUCKET/preflight/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
           trap 'gcloud storage rm "$CHECK_OBJECT" --quiet >/dev/null 2>&1 || true' EXIT
           gcloud auth list --filter=status:ACTIVE --format='value(account)'
-          gcloud services describe cloudbuild.googleapis.com --project "$PROJECT_ID" --format='value(state)'
           gcloud storage buckets describe "$BUCKET" --format='yaml(name,location,uniform_bucket_level_access,public_access_prevention)'
           printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/cloudbuild-preflight.txt"
           gcloud storage cp "$RUNNER_TEMP/cloudbuild-preflight.txt" "$CHECK_OBJECT" --quiet
