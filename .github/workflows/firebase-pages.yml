@@ -31,7 +31,7 @@ jobs:
       - run: npm run test:all-connections-graph
       - run: npm run test:graph-pan
       - run: npm run test:meeting-recorder
-      - run: python3 -m pip install --user --requirement requirements-contactdb.txt
+      - run: python3 -m pip install --user duckdb==1.4.1
       - run: node --test scripts/osint-cloud.test.mjs scripts/osint-service.test.mjs scripts/firebase-bridge.test.mjs
         env:
           CONTACTGRAPH_PYTHON: python3
