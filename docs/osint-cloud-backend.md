@@ -11,7 +11,7 @@
 
 | Asset or boundary | Abuse case | Mitigation and verification |
 | --- | --- | --- |
-| Firebase identities and roles | Forged, revoked, or wrong-provider token; role bypass | Firebase Admin token verification with revocation check; active-member and server-side permission checks; negative bridge tests |
+| Firebase identities and roles | Forged, revoked, or wrong-provider token; role bypass | Firebase Admin token verification with revocation check; runtime `roles/firebaseauth.viewer` access for the required user lookup; active-member and server-side permission checks; negative bridge tests |
 | Firebase ID token destination | A compromised or mistyped client configuration sends bearer tokens to another origin | Compile-time-fixed Cloud Run service origin, exact Cloud Run CORS allowlist, regression source test |
 | Private contacts and OSINT records | IDOR or unauthorised status/confirmation change | Contact existence checks, permission checks, strict IDs, Admin-only OSINT collections, Firestore transactions |
 | Provider and OpenAI credentials | Secret committed, returned, or logged | Secret Manager/env injection, no response field, no query/header logging, source and artifact secret scans |
@@ -42,6 +42,7 @@
 ## Required production checks
 
 - Health and authenticated availability.
+- Runtime service account has `roles/firebaseauth.viewer`; an owner snapshot request succeeds with revocation checking enabled.
 - One managed web search and one free-provider search using a synthetic query.
 - One save/dismiss cycle on synthetic data.
 - Scheduler authentication rejection and one authorised no-op tick.

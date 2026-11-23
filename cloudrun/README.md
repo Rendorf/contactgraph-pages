@@ -5,7 +5,7 @@ The production OSINT API runs on Cloud Run in `europe-west1` and stores state in
 ## One-time bootstrap
 
 1. Create Artifact Registry repository `contactgraph` in `europe-west1`.
-2. Create runtime, scheduler, and GitHub deploy service accounts using least-privilege IAM. The runtime account needs Firestore access, Cloud Tasks enqueue access, and Secret Manager access only to `brave-search-api-key` and `open-api-key`; the scheduler identity does not need data access. Permit the Cloud Scheduler and Cloud Tasks service agents to mint OIDC tokens for the scheduler identity.
+2. Create runtime, scheduler, and GitHub deploy service accounts using least-privilege IAM. The runtime account needs Firestore access, Cloud Tasks enqueue access, Firebase Authentication Viewer (`roles/firebaseauth.viewer`) for revoked-token checks, and Secret Manager access only to `brave-search-api-key` and `open-api-key`; the scheduler identity does not need data access. Permit the Cloud Scheduler and Cloud Tasks service agents to mint OIDC tokens for the scheduler identity.
 3. Create Secret Manager secrets `brave-search-api-key` and `open-api-key`, then add the current keys as versions without printing them in a terminal, workflow, or log. The OpenAI secret preserves birthday and holiday message generation after the API hostname moves away from Hermes.
 4. Configure GitHub environment `production-osint` with repository variables:
    `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_RUNTIME_SERVICE_ACCOUNT`, and `GCP_SCHEDULER_SERVICE_ACCOUNT`.
