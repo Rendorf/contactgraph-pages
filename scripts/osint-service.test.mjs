@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fetchCandidateImage, pinnedLookup, positionsFromHtml, positionsFromResults, publicAddress, publicUrl } from "./osint-candidates.mjs";
 import { defaultOsintQuery, osintSearchPlan, suggestMaigretHandles } from "./osint-search.mjs";
-import { normalizeHandles, normalizeProviders, parseMaigretReport } from "./osint-providers.mjs";
+import { normalizeHandles, normalizeProviders, openAlexHeaders, parseMaigretReport } from "./osint-providers.mjs";
 
 test("contact metadata narrows automatic searches without exposing private fields", () => {
   const contact = { name: "Example Person", organization: "Example Org", role: "Counsel", department: "Legal", locations: ["Baku"], notes: "Private meeting", emails: [{ address: "private@example.org" }], phones: [{ number: "+12345" }], addresses: [{ city: "Home City" }] };
@@ -61,10 +61,22 @@ test("provider and username inputs are constrained", () => {
   assert.deepEqual(suggestMaigretHandles({ name: "Example Person", socials: [{ value: "https://github.com/examplep" }] }), ["examplep", "exampleperson", "example.person"]);
 });
 
+test("OpenAlex credentials are valid and scoped to the official API origin", () => {
+  const key = "syntheticOpenAlexKey_1";
+  const official = new URL("https://api.openalex.org/authors");
+  assert.deepEqual(openAlexHeaders(official, key), { authorization: `Bearer ${key}` });
+  assert.deepEqual(openAlexHeaders(official, undefined), {}, "an absent local-development key permits anonymous use");
+  assert.deepEqual(openAlexHeaders(new URL("https://example.org/authors"), key), {}, "custom origins never receive the credential");
+  assert.throws(() => openAlexHeaders(official, ""), /configuration is invalid/);
+  assert.throws(() => openAlexHeaders(official, "short"), /configuration is invalid/);
+  assert.throws(() => openAlexHeaders(official, `${key}\nInjected: value`), /configuration is invalid/);
+});
+
 test("OSINT manual search, feed collection, review and local schedule", { skip: process.env.CONTACTGRAPH_SKIP_LOCAL_DB_TEST === "1" }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "contactgraph-osint-"));
   const requestedQueries = [];
   const requestedPaths = [];
+  const openAlexAuthorization = [];
   let gdeltUnavailable = false;
   let newsUnavailable = false;
   const searchServer = createServer((request, response) => {
@@ -77,7 +89,10 @@ test("OSINT manual search, feed collection, review and local schedule", { skip: 
       return response.end(JSON.stringify({ articles: [{ url: "https://example.org/global-news", title: "Global mention", seendate: "20261016T090000Z", domain: "example.org" }] }));
     }
     if (searchUrl.pathname === "/wikidata") return response.end(JSON.stringify({ search: [{ id: "Q123", label: "Example Person", description: "A possible match" }] }));
-    if (searchUrl.pathname === "/openalex") return response.end(JSON.stringify({ results: [{ id: "https://openalex.org/A123", display_name: "Example Person", works_count: 5, last_known_institutions: [{ display_name: "Example University" }] }] }));
+    if (searchUrl.pathname === "/openalex") {
+      openAlexAuthorization.push(request.headers.authorization || "");
+      return response.end(JSON.stringify({ results: [{ id: "https://openalex.org/A123", display_name: "Example Person", works_count: 5, last_known_institutions: [{ display_name: "Example University" }] }] }));
+    }
     const category = searchUrl.searchParams.get("categories");
     if (category === "news" && newsUnavailable) { response.writeHead(503); return response.end(JSON.stringify({ error: "offline" })); }
     response.end(JSON.stringify({ results: category === "images" ? [{ url: "https://example.org/profile", img_src: "https://example.org/portrait.jpg", title: "Example Person portrait" }] : category === "general" ? [] : [{ url: "https://example.org/person-news", title: "Person in the news", content: "A possible mention", engine: "test" }] }));
@@ -97,6 +112,7 @@ test("OSINT manual search, feed collection, review and local schedule", { skip: 
     process.env.CONTACTGRAPH_GDELT_URL = `http://127.0.0.1:${searchServer.address().port}/gdelt`;
     process.env.CONTACTGRAPH_WIKIDATA_URL = `http://127.0.0.1:${searchServer.address().port}/wikidata`;
     process.env.CONTACTGRAPH_OPENALEX_URL = `http://127.0.0.1:${searchServer.address().port}/openalex`;
+    process.env.OPENALEX_API_KEY = "syntheticOpenAlexKey_1";
     const { handleOsintRoute, runOsintDailyTick } = await import("./osint-service.mjs");
     const contacts = [{ id: "one", name: "Example Person", organization: "Example Org", role: "Counsel", locations: ["Baku"], notes: "Private meeting", emails: [{ address: "private@example.org" }] }];
     let contactReads = 0;
@@ -199,9 +215,12 @@ test("OSINT manual search, feed collection, review and local schedule", { skip: 
     const bothUnavailable = (await call("/api/osint/search", "POST", { query: "Example Person", providers: ["gdelt"] })).body.providers.gdelt;
     assert.equal(bothUnavailable.findings.length, 0);
     assert.match(bothUnavailable.errors[0], /GDELT rate limited and managed news search failed/);
+    assert.ok(openAlexAuthorization.length > 0);
+    assert.ok(openAlexAuthorization.every(value => value === ""), "custom OpenAlex origins never receive the API key");
   } finally {
     await Promise.all([new Promise(resolve => searchServer.close(resolve)), new Promise(resolve => feedServer.close(resolve))]);
     await rm(directory, { recursive: true, force: true });
+    delete process.env.OPENALEX_API_KEY;
   }
 });
 

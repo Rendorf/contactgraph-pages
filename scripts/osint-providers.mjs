@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 export const OSINT_PROVIDERS = ["web", "gdelt", "wikidata", "openalex", "maigret"];
 const providerSet = new Set(OSINT_PROVIDERS);
+const OPENALEX_ORIGIN = "https://api.openalex.org";
 let maigretQueue = Promise.resolve();
 let gdeltBlockedUntil = 0;
 
@@ -22,11 +23,19 @@ export function normalizeHandles(value) {
   return value;
 }
 
-async function fetchJson(url, timeout = 20000) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeout), headers: { accept: "application/json", "user-agent": "ContactGraph-OSINT/1.0" } });
+async function fetchJson(url, timeout = 20000, headers = {}) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeout), headers: { accept: "application/json", "user-agent": "ContactGraph-OSINT/1.0", ...headers } });
   if (response.status === 429) throw new Error("Rate limited (HTTP 429); try again later");
   if (!response.ok) throw new Error("Source returned HTTP " + response.status);
   return response.json();
+}
+
+export function openAlexHeaders(url, apiKey) {
+  if (url.origin !== OPENALEX_ORIGIN) return {};
+  if (apiKey === undefined) return {};
+  const key = typeof apiKey === "string" ? apiKey.trim() : "";
+  if (!key || key.length < 16 || key.length > 256 || /[\s\x00-\x1f\x7f]/.test(key)) throw new Error("OpenAlex API key configuration is invalid");
+  return { authorization: `Bearer ${key}` };
 }
 
 function valueText(value, limit = 500) {
@@ -121,7 +130,7 @@ export async function searchOpenAlex(query, contact) {
   const url = new URL(process.env.CONTACTGRAPH_OPENALEX_URL || "https://api.openalex.org/authors");
   url.searchParams.set("search", contact?.name || query);
   url.searchParams.set("per_page", "15");
-  const body = await fetchJson(url);
+  const body = await fetchJson(url, 20000, openAlexHeaders(url, process.env.OPENALEX_API_KEY));
   return (Array.isArray(body.results) ? body.results : []).flatMap(author => {
     const id = String(author.id || "").match(/A\d+$/)?.[0];
     if (!id) return [];
